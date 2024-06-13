@@ -7,7 +7,7 @@ import "hardhat/console.sol";
 contract CSPlatform {
 
     enum ContributionStatus {Created, Assigned, Reviewed}
-    enum ContributionResult {Approved, Rejected}
+    enum ContributionResult {None, Approved, Rejected}
 
     struct Contribution {
         address participant;
@@ -25,14 +25,15 @@ contract CSPlatform {
         bool exists;
     }
 
-    Contribution[] public contributions;
+    Contribution[] public unassignedContributions;
+    Contribution[] public assignedContributions;
 
     mapping(address => User) public users;
 
     uint public minReviewReputation = 5;
 
-    event ContributionCreated(address indexed participant, string imageUrl, uint indexed contributionId);
-    event ContributionAssigned(address indexed participant, string imageUrl, uint indexed contributionId, address indexed reviewer);
+    event ContributionCreated(address indexed participant, string imageUrl);
+    event ContributionAssigned(uint indexed contributionId, address indexed participant, string imageUrl, address indexed reviewer);
     event CoordinatesExchanged(uint indexed contributionId, string coordinates);
 
     constructor() {
@@ -51,9 +52,9 @@ contract CSPlatform {
             _imageUrl,
             "",
             ContributionStatus.Created,
-            ContributionResult.Rejected
+            ContributionResult.None
         );
-        contributions.push(contribution);
+        unassignedContributions.push(contribution);
 
         if (users[msg.sender].exists == false) {
             users[msg.sender] = User(
@@ -64,31 +65,42 @@ contract CSPlatform {
             );
         }
         users[msg.sender].openContributions++;
-        emit ContributionCreated(msg.sender, _imageUrl, contributions.length - 1);
+        emit ContributionCreated(msg.sender, _imageUrl);
     }
 
     // TODO: Implement random number with Chainlink VRF
-    function assignContribution() public {
+    function assignContribution() public unassignedContributionExists {
         uint random = uint256(keccak256(abi.encodePacked(
                 tx.origin,
                 blockhash(block.number - 1),
                 block.timestamp
-            ))) % contributions.length;
+            ))) % unassignedContributions.length;
 
-        Contribution storage contribution = contributions[random];
+        Contribution memory contribution = unassignedContributions[random];
+
+        // Replace assigned contribution and delete last element
+        unassignedContributions[random] = unassignedContributions[unassignedContributions.length - 1];
+        unassignedContributions.pop();
+
         contribution.reviewer = msg.sender;
         contribution.status = ContributionStatus.Assigned;
-        contributions[random] = contribution;
+        assignedContributions.push(contribution);
 
         users[msg.sender].openReview = true;
-        emit ContributionAssigned(contribution.participant, contribution.imageUrl, random, msg.sender);
+        uint assignedContributionsIndex = assignedContributions.length - 1;
+        emit ContributionAssigned(assignedContributionsIndex, contribution.participant, contribution.imageUrl, msg.sender);
     }
 
-    function exchangeCoordinates(uint _contributionId, string memory _coordinates) public {
-        Contribution storage contribution = contributions[_contributionId];
+    function updateCoordinates(uint _contributionId, string memory _coordinates) public {
+        Contribution storage contribution = assignedContributions[_contributionId];
         require(contribution.reviewer == msg.sender, "Only the reviewer can exchange coordinates");
         contribution.coordinates = _coordinates;
-        contributions[_contributionId] = contribution;
+        assignedContributions[_contributionId] = contribution;
         emit CoordinatesExchanged(_contributionId, _coordinates);
+    }
+
+    modifier unassignedContributionExists() {
+        require(unassignedContributions.length > 0, "No unassigned contributions available");
+        _;
     }
 }
