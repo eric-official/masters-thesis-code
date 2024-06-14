@@ -1,4 +1,9 @@
+const Table = require('cli-table3')
+const colors = require('@colors/colors');
+
+
 module.exports = {
+
     formatCoordinatesToBytes: async function (encryptedCoordinates) {
         // Concatenate parts into a single Buffer
         const encryptedData = Buffer.concat([
@@ -37,5 +42,25 @@ module.exports = {
         };
 
         return encryptedCoordinates;
+    },
+
+
+    createCliTable: async function(columns) {
+        const columnWidths = {
+            'Wallet': 15,
+            'User Group': 15,
+            'Address': 50,
+            'Private Key': 70,
+            'Balance (ETH)': 15,
+            'Contribution Index': 20,
+            'Participant Address': 50,
+            'Reviewer Address': 50,
+            'Image': 20,
+            'Coordinates': 20
+        }
+        return new Table({
+            head: columns.map(column => colors.blue(column)),
+            colWidths: columns.map(column => columnWidths[column])
+        });
     }
 }

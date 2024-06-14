@@ -33,7 +33,7 @@ contract CSPlatform {
     uint public minReviewReputation = 5;
 
     event ContributionCreated(address indexed participant, string imageUrl);
-    event ContributionAssigned(uint indexed contributionId, address indexed participant, string imageUrl, address indexed reviewer);
+    event ContributionAssigned(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl);
     event CoordinateUpdated(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl, bytes coordinates);
 
     constructor() {
@@ -88,7 +88,7 @@ contract CSPlatform {
 
         users[msg.sender].openReview = true;
         uint assignedContributionsIndex = assignedContributions.length - 1;
-        emit ContributionAssigned(assignedContributionsIndex, contribution.participant, contribution.imageUrl, msg.sender);
+        emit ContributionAssigned(assignedContributionsIndex, contribution.participant, msg.sender, contribution.imageUrl);
     }
 
     function updateCoordinates(uint _contributionId, bytes memory _coordinates) public {

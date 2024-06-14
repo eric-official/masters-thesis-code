@@ -1,7 +1,7 @@
 const {ethers} = require('hardhat')
 const {getContributionCreatedEvents, getContributionAssignedEvents, getCoordinateUpdatedEvents} = require('./events')
 const {formatCoordinatesToBytes, formatCoordinatesFromBytes} = require('./utils')
-const {displayWallets, displayCreatedContributions, displayAssignedContributions} = require('./display')
+const {displayWallets, displayCreatedContributions, displayAssignedContributions, displayUpdatedCoordinates, displayDecryptedCoordinates} = require('./display')
 const Table = require('cli-table3')
 const colors = require('@colors/colors');
 const eccrypto = require('eccrypto');
@@ -72,7 +72,7 @@ async function updateCoordinates(CSPlatform, participantWallets, reviewerWallets
 
     for (let i = 0; i < events.length; i++) {
         const event = events[i];
-        const [id, participant, image, reviewer] = event.args;
+        const [id, participant, reviewer, image] = event.args;
 
         const participantIndex = participantWallets.findIndex(wallet => wallet.address === participant);
         const reviewerIndex = reviewerWallets.findIndex(wallet => wallet.address === reviewer);
@@ -88,59 +88,6 @@ async function updateCoordinates(CSPlatform, participantWallets, reviewerWallets
     return CSPlatform;
 }
 
-async function displayUpdatedCoordinates(CSPlatform) {
-    const events = await getCoordinateUpdatedEvents(CSPlatform);
-
-    const columns = [
-        colors.blue('Contribution Index'),
-        colors.blue('Participant Address'),
-        colors.blue('Image'),
-        colors.blue('Reviewer Address'),
-        colors.blue('Coordinates'),
-    ];
-    const table = new Table({
-        head: columns
-    });
-
-    for (let i = 0; i < events.length; i++) {
-        const event = events[i];
-        const [id, participant, reviewer, image, coordinates] = event.args;
-        table.push([id, participant, reviewer, image, coordinates]);
-    }
-
-    console.log(table.toString());
-}
-
-async function displayDecryptedCoordinates(CSPlatform, participantWallets, reviewerWallets) {
-    const events = await getCoordinateUpdatedEvents(CSPlatform)
-
-    const columns = [
-        colors.blue('Contribution Index'),
-        colors.blue('Participant Address'),
-        colors.blue('Image'),
-        colors.blue('Reviewer Address'),
-        colors.blue('Coordinates'),
-    ];
-    const table = new Table({
-        head: columns
-    });
-
-    for (let i = 0; i < events.length; i++) {
-        const event = events[i];
-        const [id, participant, reviewer, image, coordinates] = event.args;
-
-        let reviewerIndex = reviewerWallets.findIndex(wallet => wallet.address === reviewer);
-        let receiverPrivateKey = Buffer.from(reviewerWallets[reviewerIndex].privateKey.slice(2), 'hex');
-
-        let encryptedCoordinates = await formatCoordinatesFromBytes(coordinates);
-        let decryptedCoordinates = await eccrypto.decrypt(receiverPrivateKey, encryptedCoordinates);
-        decryptedCoordinates = decryptedCoordinates.toString();
-
-        table.push([id, participant, reviewer, image, decryptedCoordinates]);
-    }
-
-    console.log(table.toString());
-}
 
 /*Script to interact with all functions of CSPlatform.sol contract*/
 async function main() {
