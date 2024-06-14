@@ -13,7 +13,7 @@ contract CSPlatform {
         address participant;
         address reviewer;
         string imageUrl;
-        string coordinates;
+        bytes coordinates;
         ContributionStatus status;
         ContributionResult result;
     }
@@ -34,7 +34,7 @@ contract CSPlatform {
 
     event ContributionCreated(address indexed participant, string imageUrl);
     event ContributionAssigned(uint indexed contributionId, address indexed participant, string imageUrl, address indexed reviewer);
-    event CoordinatesExchanged(uint indexed contributionId, string coordinates);
+    event CoordinateUpdated(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl, bytes coordinates);
 
     constructor() {
         users[msg.sender] = User(
@@ -91,12 +91,12 @@ contract CSPlatform {
         emit ContributionAssigned(assignedContributionsIndex, contribution.participant, contribution.imageUrl, msg.sender);
     }
 
-    function updateCoordinates(uint _contributionId, string memory _coordinates) public {
+    function updateCoordinates(uint _contributionId, bytes memory _coordinates) public {
         Contribution storage contribution = assignedContributions[_contributionId];
-        require(contribution.reviewer == msg.sender, "Only the reviewer can exchange coordinates");
+        require(contribution.participant == msg.sender, "Only the reviewer can exchange coordinates");
         contribution.coordinates = _coordinates;
         assignedContributions[_contributionId] = contribution;
-        emit CoordinatesExchanged(_contributionId, _coordinates);
+        emit CoordinateUpdated(_contributionId, msg.sender, contribution.reviewer, contribution.imageUrl, _coordinates);
     }
 
     modifier unassignedContributionExists() {
