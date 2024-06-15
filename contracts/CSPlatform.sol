@@ -35,6 +35,7 @@ contract CSPlatform {
     event ContributionCreated(address indexed participant, string imageUrl);
     event ContributionAssigned(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl);
     event CoordinateUpdated(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl, bytes coordinates);
+    event ContributionReviewed(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl, ContributionResult result);
 
     constructor() {
         users[msg.sender] = User(
@@ -97,6 +98,26 @@ contract CSPlatform {
         contribution.coordinates = _coordinates;
         assignedContributions[_contributionId] = contribution;
         emit CoordinateUpdated(_contributionId, msg.sender, contribution.reviewer, contribution.imageUrl, _coordinates);
+    }
+
+    function reviewContribution(uint _contributionId, bool _realImage, bool _correctCoordinates) public {
+        Contribution storage contribution = assignedContributions[_contributionId];
+
+        if (_realImage && _correctCoordinates) {
+            contribution.result = ContributionResult.Approved;
+            users[contribution.participant].reputation++;
+        } else {
+            contribution.result = ContributionResult.Rejected;
+            users[contribution.participant].reputation--;
+        }
+
+        contribution.status = ContributionStatus.Reviewed;
+        assignedContributions[_contributionId] = contribution;
+
+        users[contribution.reviewer].openReview = false;
+        users[contribution.participant].openContributions--;
+
+        emit ContributionReviewed(_contributionId, contribution.participant, contribution.reviewer, contribution.imageUrl, contribution.result);
     }
 
     modifier unassignedContributionExists() {

@@ -1,7 +1,9 @@
 const {ethers} = require('hardhat')
 const {getContributionCreatedEvents, getContributionAssignedEvents, getCoordinateUpdatedEvents} = require('./events')
 const {formatCoordinatesToBytes, formatCoordinatesFromBytes, getImageURLs} = require('./utils')
-const {displayWallets, displayCreatedContributions, displayAssignedContributions, displayUpdatedCoordinates, displayDecryptedCoordinates} = require('./display')
+const {displayWallets, displayCreatedContributions, displayAssignedContributions, displayUpdatedCoordinates, displayDecryptedCoordinates,
+    displayReviewedContributions
+} = require('./display')
 const Table = require('cli-table3')
 const colors = require('@colors/colors');
 const eccrypto = require('eccrypto');
@@ -16,12 +18,12 @@ const eccrypto = require('eccrypto');
  * @type {(numWallets: number, signer: ethers.Signer, provider: ethers.HardhatEthersProvider) => Promise<Array.<ethers.Wallet>>}
  */
 async function createWallets(numWallets, signer, provider) {
-    let connectedWallets = [];
+    const connectedWallets = [];
 
     for (let i = 0; i < numWallets; i++) {
-        let wallet = ethers.Wallet.createRandom();
-        let connectedWallet = wallet.connect(provider);
-        let tx = await signer.sendTransaction({to: connectedWallet.address, value: ethers.parseEther("10")});
+        const wallet = ethers.Wallet.createRandom();
+        const connectedWallet = wallet.connect(provider);
+        const tx = await signer.sendTransaction({to: connectedWallet.address, value: ethers.parseEther("10")});
         await tx.wait();
         connectedWallets.push(connectedWallet);
     }
@@ -81,15 +83,31 @@ async function updateCoordinates(CSPlatform, participantWallets, reviewerWallets
 
         const participantIndex = participantWallets.findIndex(wallet => wallet.address === participant);
         const reviewerIndex = reviewerWallets.findIndex(wallet => wallet.address === reviewer);
-        let reviewerPublicKey = Buffer.from(reviewerWallets[reviewerIndex].publicKey.slice(2), 'hex');
+        const reviewerPublicKey = Buffer.from(reviewerWallets[reviewerIndex].publicKey.slice(2), 'hex');
 
         const coordinates = urlCoordinateMapping[image];
-        let coordinatesBuffer = Buffer.from(coordinates);
-        let encryptedCoordinates = await eccrypto.encrypt(reviewerPublicKey, coordinatesBuffer);
-        let formattedCoordinates = await formatCoordinatesToBytes(encryptedCoordinates);
+        const coordinatesBuffer = Buffer.from(coordinates);
+        const encryptedCoordinates = await eccrypto.encrypt(reviewerPublicKey, coordinatesBuffer);
+        const formattedCoordinates = await formatCoordinatesToBytes(encryptedCoordinates);
 
         const updateCoordinatesResponse = await CSPlatform.connect(participantWallets[participantIndex]).updateCoordinates(id, formattedCoordinates);
         await updateCoordinatesResponse.wait();
+    }
+
+    return CSPlatform;
+}
+
+
+async function reviewContributions(CSPlatform, reviewerWallets) {
+    const events = await getContributionAssignedEvents(CSPlatform);
+
+    for (let i = 0; i < events.length; i++) {
+        const event = events[i];
+        const [id, participant, reviewer, image] = event.args;
+
+        const reviewerIndex = reviewerWallets.findIndex(wallet => wallet.address === reviewer);
+        const reviewResponse = await CSPlatform.connect(reviewerWallets[reviewerIndex]).reviewContribution(id, true, true);
+        await reviewResponse.wait();
     }
 
     return CSPlatform;
@@ -158,6 +176,11 @@ async function main() {
     console.log("Decrypt coordinates...");
     await displayDecryptedCoordinates(CSPlatform, participantWallets, reviewerWallets);
     console.log("Coordinates decrypted!");
+
+    console.log("Review contributions...");
+    CSPlatform = await reviewContributions(CSPlatform, reviewerWallets);
+    await displayReviewedContributions(CSPlatform);
+    console.log("Contributions reviewed!");
 }
 
 main()

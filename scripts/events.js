@@ -26,5 +26,15 @@ module.exports = {
         } catch (e) {
             console.log('Failed to get event:', e);
         }
+    },
+
+
+    getContributionReviewedEvents: async function(CSPlatform) {
+        try {
+            const filter = CSPlatform.filters.ContributionReviewed;
+            return await CSPlatform.queryFilter(filter);
+        } catch (e) {
+            console.log('Failed to get event:', e);
+        }
     }
 };

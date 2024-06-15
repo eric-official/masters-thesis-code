@@ -1,5 +1,5 @@
 const {ethers} = require("hardhat");
-const {getContributionCreatedEvents, getContributionAssignedEvents, getCoordinateUpdatedEvents} = require("./events");
+const {getContributionCreatedEvents, getContributionAssignedEvents, getCoordinateUpdatedEvents, getContributionReviewedEvents} = require("./events");
 const {createCliTable, formatCoordinatesFromBytes} = require("./utils");
 const colors = require("@colors/colors");
 const Table = require("cli-table3");
@@ -105,6 +105,22 @@ module.exports = {
             decryptedCoordinates = decryptedCoordinates.toString();
 
             table.push([id, participant, reviewer, image, decryptedCoordinates]);
+        }
+
+        console.log(table.toString());
+    },
+
+
+    displayReviewedContributions: async function(CSPlatform) {
+        const events = await getContributionReviewedEvents(CSPlatform);
+
+        const columns = ['Index', 'Participant Address', 'Reviewer Address', 'Image', 'Result'];
+        const table = await createCliTable(columns);
+
+        for (let i = 0; i < events.length; i++) {
+            const event = events[i];
+            const [id, participant, reviewer, image, result] = event.args;
+            table.push([id, participant, reviewer, image, result]);
         }
 
         console.log(table.toString());
