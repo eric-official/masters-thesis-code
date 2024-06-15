@@ -1,8 +1,31 @@
 const Table = require('cli-table3')
 const colors = require('@colors/colors');
+const {Akord, Auth} = require('@akord/akord-js');
+require('dotenv').config();
 
 
 module.exports = {
+
+    getImageURLs: async function () {
+        try {
+            const EMAIL = process.env.AKORD_EMAIL;
+            const PASSWORD = process.env.AKORD_PASSWORD;
+            const API_KEY = process.env.AKORD_API_KEY;
+            const VAULT_ID = 'L8YrrUseO1dVmmoMN1uAKbTeqwsH37zM-2bKGD3J474';
+            const arweaveGatewayUrl = "https://arweave.net/";
+
+            Auth.configure({ apiKey: API_KEY});
+            const { wallet } = await Auth.signIn(EMAIL.toString(), PASSWORD.toString())
+            const akord = await Akord.init(wallet)
+
+            const stacks = await akord.stack.listAll(VAULT_ID);
+            return stacks.map(stack => arweaveGatewayUrl + stack.uri);
+
+        } catch (error) {
+            console.error('Error retrieving image URLs:', error);
+        }
+    },
+
 
     formatCoordinatesToBytes: async function (encryptedCoordinates) {
         // Concatenate parts into a single Buffer
@@ -18,7 +41,7 @@ module.exports = {
     },
 
 
-    formatCoordinatesFromBytes: async function(encryptedCoordinatesBytes) {
+    formatCoordinatesFromBytes: async function (encryptedCoordinatesBytes) {
         // Convert the hex string to a Buffer
         const encryptedCoordinatesBuffer = Buffer.from(encryptedCoordinatesBytes.slice(2), "hex");
 
@@ -45,18 +68,18 @@ module.exports = {
     },
 
 
-    createCliTable: async function(columns) {
+    createCliTable: async function (columns) {
         const columnWidths = {
             'Wallet': 15,
             'User Group': 15,
             'Address': 50,
             'Private Key': 70,
             'Balance (ETH)': 15,
-            'Contribution Index': 20,
-            'Participant Address': 50,
-            'Reviewer Address': 50,
-            'Image': 20,
-            'Coordinates': 20
+            'Index': 10,
+            'Participant Address': 20,
+            'Reviewer Address': 20,
+            'Image': 70,
+            'Coordinates': 40
         }
         return new Table({
             head: columns.map(column => colors.blue(column)),

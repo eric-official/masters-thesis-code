@@ -1,6 +1,6 @@
 const {ethers} = require('hardhat')
 const {getContributionCreatedEvents, getContributionAssignedEvents, getCoordinateUpdatedEvents} = require('./events')
-const {formatCoordinatesToBytes, formatCoordinatesFromBytes} = require('./utils')
+const {formatCoordinatesToBytes, formatCoordinatesFromBytes, getImageURLs} = require('./utils')
 const {displayWallets, displayCreatedContributions, displayAssignedContributions, displayUpdatedCoordinates, displayDecryptedCoordinates} = require('./display')
 const Table = require('cli-table3')
 const colors = require('@colors/colors');
@@ -39,10 +39,15 @@ async function splitWallets(connectedWallets, participantReviewerRatio) {
 }
 
 
-async function createContributions(numContributions, CSPlatform, participantWallets, imageUrl) {
+async function createContributions(numContributions, CSPlatform, participantWallets, imageUrls) {
     for (let i = 0; i < numContributions; i++) {
         const participantIndex = (i + participantWallets.length) % participantWallets.length
-        const createContributionResponse1 = await CSPlatform.connect(participantWallets[participantIndex]).createContribution(imageUrl);
+        const participantWallet = participantWallets[participantIndex];
+
+        const imageIndex = (i + imageUrls.length) % imageUrls.length;
+        const imageUrl = imageUrls[imageIndex];
+
+        const createContributionResponse1 = await CSPlatform.connect(participantWallet).createContribution(imageUrl);
         await createContributionResponse1.wait();
     }
 
@@ -67,7 +72,7 @@ async function assignContributions(CSPlatform, reviewerWallets) {
 }
 
 
-async function updateCoordinates(CSPlatform, participantWallets, reviewerWallets) {
+async function updateCoordinates(CSPlatform, participantWallets, reviewerWallets, urlCoordinateMapping) {
     const events = await getContributionAssignedEvents(CSPlatform)
 
     for (let i = 0; i < events.length; i++) {
@@ -77,7 +82,9 @@ async function updateCoordinates(CSPlatform, participantWallets, reviewerWallets
         const participantIndex = participantWallets.findIndex(wallet => wallet.address === participant);
         const reviewerIndex = reviewerWallets.findIndex(wallet => wallet.address === reviewer);
         let reviewerPublicKey = Buffer.from(reviewerWallets[reviewerIndex].publicKey.slice(2), 'hex');
-        let coordinatesBuffer = Buffer.from("Hello, this is a secret message!");
+
+        const coordinates = urlCoordinateMapping[image];
+        let coordinatesBuffer = Buffer.from(coordinates);
         let encryptedCoordinates = await eccrypto.encrypt(reviewerPublicKey, coordinatesBuffer);
         let formattedCoordinates = await formatCoordinatesToBytes(encryptedCoordinates);
 
@@ -92,13 +99,31 @@ async function updateCoordinates(CSPlatform, participantWallets, reviewerWallets
 /*Script to interact with all functions of CSPlatform.sol contract*/
 async function main() {
 
+    // Constants for simulating test cases
     const NUM_WALLETS = 10;
     const PARTICIPANT_REVIEWER_RATIO = 0.5;
     const NUM_CONTRIBUTIONS = 10;
 
-    const imageUrl = "http://example.com"; // Replace with actual image URL
+    // Assumed user inputs
+    const urlCoordinateMapping = {
+        "https://arweave.net/id5oYIqwOfW_NAEquZJSMRxKov7IRfYREJ03eJCtWZQ": "23° 11' 6.786\" S, 18° 22' 36.054\" E",
+        "https://arweave.net/Rk9Y8H1ovtcVDit5IsG2SJEZhBqL5Iy_DM9-ZQRx5nk": "23° 12' 48.954\" S, 18° 21' 18.996\" E",
+        "https://arweave.net/7kHJd52Gc-eGKwrNtQ5SU7JULtUEMN6Rrr_Fh5ZzKBI": "23° 11' 19.194\" S, 18° 22' 35.91\" E",
+        "https://arweave.net/mbmDz84Bwg-QJUPti1R_NDppp7GlaKU8B-lIaIl-WeI": "23° 12' 46.794\" S, 18° 21' 29.484\" E",
+        "https://arweave.net/9xxe9BJVc8GuLiwcQ1b-tJ13AZjk8M2Htro-Ho_Tty4": "23° 12' 44.838\" S, 18° 21' 29.256\" E",
+        "https://arweave.net/1x0AMo5rNQ49CSSRcRPfvNRcSnZHNyZiP-qkEE0yfuc": "23° 11' 19.182\" S, 18° 22' 38.19\" E",
+        "https://arweave.net/HQjn6bjPJ7ZVFqD5OT9ZZi5f6G6aQ1EsAY71ArKs718": "23° 11' 4.698\" S, 18° 22' 54.78\" E",
+        "https://arweave.net/I30T_ukE7QGYMPEJv3BMvTfftqyl0UbgMoovNUXCNTw": "23° 11' 4.65\" S, 18° 22' 34.926\" E",
+        "https://arweave.net/NqQee7j8ES8wauzqBOCLg-xB9jNaMCNYB68x3ZpuUgk": "23° 12' 46.878\" S, 18° 21' 14.844\" E",
+        "https://arweave.net/Gzpb6toLQtpzWr2dItEmtbutSOWmFH1LOQh2uxd8nck": "23° 11' 4.638\" S, 18° 22' 39.138\" E",
+    }
+
     const [signer] = await ethers.getSigners();
     const provider = ethers.provider;
+
+    console.log("Get image URLs...");
+    const imageUrls = await getImageURLs();
+    console.log("Image URLs retrieved!");
 
     console.log("Deploying CSPlatform...");
     const CSPlatformFactory = await ethers.getContractFactory("CSPlatform");
@@ -115,7 +140,7 @@ async function main() {
     console.log(" ");
 
     console.log("Create contributions...");
-    CSPlatform = await createContributions(NUM_CONTRIBUTIONS, CSPlatform, participantWallets, imageUrl);
+    CSPlatform = await createContributions(NUM_CONTRIBUTIONS, CSPlatform, participantWallets, imageUrls);
     await displayCreatedContributions(CSPlatform);
     console.log("Contributions created!");
     console.log(" ");
@@ -126,7 +151,7 @@ async function main() {
     console.log("Contribution assigned!");
 
     console.log("Update coordinates...");
-    CSPlatform = await updateCoordinates(CSPlatform, participantWallets, reviewerWallets);
+    CSPlatform = await updateCoordinates(CSPlatform, participantWallets, reviewerWallets, urlCoordinateMapping);
     await displayUpdatedCoordinates(CSPlatform);
     console.log("Coordinates updated!");
 

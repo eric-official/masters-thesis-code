@@ -43,7 +43,7 @@ module.exports = {
     displayCreatedContributions: async function(CSPlatform) {
         const events = await getContributionCreatedEvents(CSPlatform)
 
-        const columns = ['Contribution Index', 'Participant Address', 'Image'];
+        const columns = ['Index', 'Participant Address', 'Image'];
         const table = await createCliTable(columns)
 
         for (let i = 0; i < events.length; i++) {
@@ -58,7 +58,7 @@ module.exports = {
 
     displayAssignedContributions: async function (CSPlatform) {
         const events = await getContributionAssignedEvents(CSPlatform);
-        const columns = ['Contribution Index', 'Participant Address', 'Reviewer Address', 'Image'];
+        const columns = ['Index', 'Participant Address', 'Reviewer Address', 'Image'];
         const table = await createCliTable(columns);
 
         for (let i = 0; i < events.length; i++) {
@@ -74,7 +74,7 @@ module.exports = {
     displayUpdatedCoordinates: async function(CSPlatform) {
         const events = await getCoordinateUpdatedEvents(CSPlatform);
 
-        const columns = ['Contribution Index', 'Participant Address', 'Reviewer Address', 'Image', 'Coordinates'];
+        const columns = ['Index', 'Participant Address', 'Reviewer Address', 'Image', 'Coordinates'];
         const table = await createCliTable(columns);
 
         for (let i = 0; i < events.length; i++) {
@@ -90,7 +90,7 @@ module.exports = {
     displayDecryptedCoordinates: async function(CSPlatform, participantWallets, reviewerWallets) {
         const events = await getCoordinateUpdatedEvents(CSPlatform)
 
-        const columns = ['Contribution Index', 'Participant Address', 'Reviewer Address', 'Image', 'Coordinates'];
+        const columns = ['Index', 'Participant Address', 'Reviewer Address', 'Image', 'Coordinates'];
         const table = await createCliTable(columns);
 
         for (let i = 0; i < events.length; i++) {
