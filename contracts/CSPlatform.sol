@@ -27,6 +27,8 @@ contract CSPlatform {
 
     Contribution[] public unassignedContributions;
     Contribution[] public assignedContributions;
+    Contribution[] public reviewedContributions;
+    uint[] public freeContributionsIdx;
 
     mapping(address => User) public users;
 
@@ -85,7 +87,13 @@ contract CSPlatform {
 
         contribution.reviewer = msg.sender;
         contribution.status = ContributionStatus.Assigned;
-        assignedContributions.push(contribution);
+
+        if (freeContributionsIdx.length == 0) {
+            assignedContributions.push(contribution);
+        } else {
+            assignedContributions[freeContributionsIdx[freeContributionsIdx.length - 1]] = contribution;
+            freeContributionsIdx.pop();
+        }
 
         users[msg.sender].openReview = true;
         uint assignedContributionsIndex = assignedContributions.length - 1;
@@ -109,6 +117,7 @@ contract CSPlatform {
         } else {
             contribution.result = ContributionResult.Rejected;
             users[contribution.participant].reputation--;
+            freeContributionsIdx.push(_contributionId);
         }
 
         contribution.status = ContributionStatus.Reviewed;
