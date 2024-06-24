@@ -16,6 +16,7 @@ contract CSPlatform {
         bytes coordinates;
         ContributionStatus status;
         ContributionResult result;
+        address verifier;
     }
 
     struct User {
@@ -27,7 +28,6 @@ contract CSPlatform {
 
     Contribution[] public unassignedContributions;
     Contribution[] public assignedContributions;
-    Contribution[] public reviewedContributions;
     uint[] public freeContributionsIdx;
 
     mapping(address => User) public users;
@@ -37,7 +37,8 @@ contract CSPlatform {
     event ContributionCreated(address indexed participant, string imageUrl);
     event ContributionAssigned(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl);
     event CoordinateUpdated(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl, bytes coordinates);
-    event ContributionReviewed(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl, ContributionResult result);
+    event ContributionReviewed(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl, uint result);
+    event VerifierUpdated(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl, address verifier);
 
     constructor() {
         users[msg.sender] = User(
@@ -55,7 +56,8 @@ contract CSPlatform {
             _imageUrl,
             "",
             ContributionStatus.Created,
-            ContributionResult.None
+            ContributionResult.None,
+            address(0)
         );
         unassignedContributions.push(contribution);
 
@@ -110,14 +112,17 @@ contract CSPlatform {
 
     function reviewContribution(uint _contributionId, bool _realImage, bool _correctCoordinates) public {
         Contribution storage contribution = assignedContributions[_contributionId];
+        uint resultInt;
 
         if (_realImage && _correctCoordinates) {
             contribution.result = ContributionResult.Approved;
             users[contribution.participant].reputation++;
+            resultInt = 1;
         } else {
             contribution.result = ContributionResult.Rejected;
             users[contribution.participant].reputation--;
             freeContributionsIdx.push(_contributionId);
+            resultInt = 2;
         }
 
         contribution.status = ContributionStatus.Reviewed;
@@ -126,8 +131,16 @@ contract CSPlatform {
         users[contribution.reviewer].openReview = false;
         users[contribution.participant].openContributions--;
 
-        emit ContributionReviewed(_contributionId, contribution.participant, contribution.reviewer, contribution.imageUrl, contribution.result);
+        emit ContributionReviewed(_contributionId, contribution.participant, contribution.reviewer, contribution.imageUrl, resultInt);
     }
+
+    function updateVerifier(address _verifier, uint _contributionId) public {
+        Contribution storage contribution = assignedContributions[_contributionId];
+        contribution.verifier = _verifier;
+        assignedContributions[_contributionId] = contribution;
+        emit VerifierUpdated(_contributionId, contribution.participant, contribution.reviewer, contribution.imageUrl, _verifier);
+    }
+
 
     modifier unassignedContributionExists() {
         require(unassignedContributions.length > 0, "No unassigned contributions available");

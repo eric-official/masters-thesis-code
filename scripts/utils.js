@@ -1,6 +1,7 @@
 const Table = require('cli-table3')
 const colors = require('@colors/colors');
 const {Akord, Auth} = require('@akord/akord-js');
+const {extractDegreesFromCoordinate} = require("./utils");
 require('dotenv').config();
 
 
@@ -79,11 +80,55 @@ module.exports = {
             'Participant Address': 20,
             'Reviewer Address': 20,
             'Image': 70,
-            'Coordinates': 40
+            'Coordinates': 40,
+            'Verifier': 45
         }
         return new Table({
             head: columns.map(column => colors.blue(column)),
             colWidths: columns.map(column => columnWidths[column])
         });
+    },
+
+
+    extractDegreesFromCoordinate: async function(coordinate) {
+        // Regex to match the coordinate format
+        const regex = /(\d+)° (\d+)' (\d+\.\d+)" ([NS]), (\d+)° (\d+)' (\d+\.\d+)" ([EW])/;
+        const match = coordinate.match(regex);
+
+        if (!match) {
+            throw new Error('Invalid coordinate format');
+        }
+
+        // Extract latitude degrees and direction
+        const latDegrees = parseInt(match[1]);
+        const latDirection = match[4];
+
+        // Extract longitude degrees and direction
+        const longDegrees = parseInt(match[5]);
+        const longDirection = match[8];
+
+        // Adjust for direction
+        const latitude = latDirection === 'S' ? -latDegrees : latDegrees;
+        const longitude = longDirection === 'W' ? -longDegrees : longDegrees;
+
+        return {
+            lat: latitude,
+            lon: longitude
+        };
+    },
+
+    updateUrlCoordinateMapping: async function(urlCoordinateMapping) {
+        const urlDegreeMapping = {};
+        for (const [url, coordinate] of Object.entries(urlCoordinateMapping)) {
+            urlDegreeMapping[url] = await module.exports.extractDegreesFromCoordinate(coordinate);
+        }
+
+        return urlDegreeMapping;
+    },
+
+
+    getArweaveIdFromUrl: async function(url) {
+        const parts = url.split('/');
+        return parts[parts.length - 1];
     }
 }

@@ -1,3 +1,4 @@
+const {formatNumberType} = require("hardhat/common");
 module.exports = {
     getContributionCreatedEvents: async function(CSPlatform) {
         try {
@@ -29,9 +30,26 @@ module.exports = {
     },
 
 
-    getContributionReviewedEvents: async function(CSPlatform) {
+    getContributionReviewedEvents: async function(CSPlatform, result=NaN) {
         try {
             const filter = CSPlatform.filters.ContributionReviewed;
+            const events = await CSPlatform.queryFilter(filter);
+            if (result >= 0 && result <= 2) {
+                return events.filter(event => Number(event.args.result) === result);
+            } else if (isNaN(result)) {
+                return events;
+            } else {
+                return [];
+            }
+        } catch (e) {
+            console.log('Failed to get event:', e);
+        }
+    },
+
+
+    getVerifierUpdatedEvents: async function(CSPlatform) {
+        try {
+            const filter = CSPlatform.filters.VerifierUpdated;
             return await CSPlatform.queryFilter(filter);
         } catch (e) {
             console.log('Failed to get event:', e);

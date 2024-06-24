@@ -2,8 +2,10 @@ const {ethers} = require('hardhat')
 const {getContributionCreatedEvents, getContributionAssignedEvents, getCoordinateUpdatedEvents} = require('./events')
 const {formatCoordinatesToBytes, formatCoordinatesFromBytes, getImageURLs} = require('./utils')
 const {displayWallets, displayCreatedContributions, displayAssignedContributions, displayUpdatedCoordinates, displayDecryptedCoordinates,
-    displayReviewedContributions
+    displayReviewedContributions,
+    displayUpdatedVerifiers
 } = require('./display')
+const {createProofs, createZKPContracts} = require('./proofs')
 const Table = require('cli-table3')
 const colors = require('@colors/colors');
 const eccrypto = require('eccrypto');
@@ -181,6 +183,11 @@ async function main() {
     CSPlatform = await reviewContributions(CSPlatform, reviewerWallets);
     await displayReviewedContributions(CSPlatform);
     console.log("Contributions reviewed!");
+
+    console.log("Create ZKP Contracts...");
+    CSPlatform = await createZKPContracts(CSPlatform, participantWallets, urlCoordinateMapping);
+    await displayUpdatedVerifiers(CSPlatform);
+    console.log("ZKP Contracts created!");
 }
 
 main()
