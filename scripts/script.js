@@ -3,7 +3,7 @@ const {getContributionCreatedEvents, getContributionAssignedEvents, getCoordinat
 const {formatCoordinatesToBytes, formatCoordinatesFromBytes, getImageURLs} = require('./utils')
 const {displayWallets, displayCreatedContributions, displayAssignedContributions, displayUpdatedCoordinates, displayDecryptedCoordinates,
     displayReviewedContributions,
-    displayUpdatedVerifiers
+    displayUpdatedVerifiers, displayVerifications
 } = require('./display')
 const {createProofs, createZKPContracts} = require('./proofs')
 const Table = require('cli-table3')
@@ -185,9 +185,13 @@ async function main() {
     console.log("Contributions reviewed!");
 
     console.log("Create ZKP Contracts...");
-    CSPlatform = await createZKPContracts(CSPlatform, participantWallets, urlCoordinateMapping);
+    const createZKPContractsRes = await createZKPContracts(CSPlatform, participantWallets, reviewerWallets, urlCoordinateMapping);
+    CSPlatform = createZKPContractsRes.CSPlatform;
+    const verifications = createZKPContractsRes.verifications;
+
     await displayUpdatedVerifiers(CSPlatform);
-    console.log("ZKP Contracts created!");
+    await displayVerifications(verifications);
+    console.log("ZKP Contracts verified!");
 }
 
 main()

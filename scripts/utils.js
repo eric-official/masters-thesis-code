@@ -1,7 +1,6 @@
 const Table = require('cli-table3')
 const colors = require('@colors/colors');
 const {Akord, Auth} = require('@akord/akord-js');
-const {extractDegreesFromCoordinate} = require("./utils");
 require('dotenv').config();
 
 
@@ -81,7 +80,10 @@ module.exports = {
             'Reviewer Address': 20,
             'Image': 70,
             'Coordinates': 40,
-            'Verifier': 45
+            'Verifier': 45,
+            'Verify Result': 15,
+            'Verify Response': 15,
+            'Degrees': 10,
         }
         return new Table({
             head: columns.map(column => colors.blue(column)),

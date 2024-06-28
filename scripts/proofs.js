@@ -1,9 +1,11 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
+const snarkjs = require('snarkjs')
 const {ethers} = require('hardhat')
 
 
-const { getContributionReviewedEvents } = require('./events');
+
+const { getContributionReviewedEvents, getVerifierUpdatedEvents } = require('./events');
 const { updateUrlCoordinateMapping, getArweaveIdFromUrl} = require('./utils');
 
 
@@ -44,9 +46,31 @@ async function createCircuit(lat, lon) {
         component main = CoordinateInGrid(${lat}, ${lon});`
 }
 
-//TODO: Move contracts and circom files
+async function convertCallData(calldata) {
+    const argv = calldata
+        .replace(/["[\]\s]/g, "")
+        .split(",")
+        .map((x) => BigInt(x));
+
+    const a = [argv[0], argv[1]];
+    const b = [
+        [argv[2], argv[3]],
+        [argv[4], argv[5]],
+    ];
+    const c = [argv[6], argv[7]];
+    const input = [argv[8]];
+
+    return { a, b, c, input };
+}
+
 async function createProofs(urlDegreeMapping) {
+
     const circuitFolder = './circuits/';
+
+    if (!fs.existsSync(`${circuitFolder}`)) {
+        fs.mkdirSync(`${circuitFolder}`);
+    }
+
     try {
         for (const [url, degrees] of Object.entries(urlDegreeMapping)) {
             const circuitContent = await createCircuit(degrees.lat, degrees.lon);
@@ -56,6 +80,22 @@ async function createProofs(urlDegreeMapping) {
             await execSync(`snarkjs groth16 setup ${circuitFolder}coordinate-circuit-${arweaveId}.r1cs data/pot14_final.ptau ${circuitFolder}coordinate-circuit-${arweaveId}.zkey -o`);
             await execSync(`snarkjs zkey export solidityverifier ${circuitFolder}coordinate-circuit-${arweaveId}.zkey ${circuitFolder}coordinate-verifier-${arweaveId}.sol`);
         }
+
+        // move all solidity files from circuit folder to contracts folder
+        const circuitFolderFiles = fs.readdirSync(circuitFolder);
+        const solidityFiles = circuitFolderFiles.filter(file => file.endsWith('.sol'));
+        for (const file of solidityFiles) {
+            await fs.renameSync(`${circuitFolder}${file}`, `contracts/${file}`);
+        }
+        await execSync('npx hardhat compile');
+
+        // move all coordinate-circuit files from project folder to circuits folder
+        const projectFolderfiles = fs.readdirSync('./');
+        const circomFiles = projectFolderfiles.filter(file => file.endsWith('.circom'));
+        for (const file of circomFiles) {
+            await fs.renameSync(`${file}`, `${circuitFolder}${file}`);
+        }
+
     } catch (error) {
         console.log("Error while generating proof!", error);
     }
@@ -63,11 +103,11 @@ async function createProofs(urlDegreeMapping) {
 
 
 async function deployProofs(CSPlatform, participantWallets, events) {
-    const circuitFolder = 'contracts/';
-    const files = fs.readdirSync(circuitFolder);
+    const contractFolder = 'contracts/';
+    const files = fs.readdirSync(contractFolder);
     const verifierFiles = files.filter(file => file.startsWith('coordinate-verifier'));
 
-    const verifierPaths = verifierFiles.map(file => `${circuitFolder}${file}:Groth16Verifier`);
+    const verifierPaths = verifierFiles.map(file => `${contractFolder}${file}:Groth16Verifier`);
     const verifierContracts = [];
 
     for (const verifierPath of verifierPaths) {
@@ -86,18 +126,50 @@ async function deployProofs(CSPlatform, participantWallets, events) {
         await updateVerifierResponse1.wait();
     }
 
-    return CSPlatform;
+    return {CSPlatform: CSPlatform, verifierContracts: verifierContracts};
+}
+
+
+async function verifyProof(CSPlatform, verifierContracts, reviewerWallets, events, urlDegreeMapping) {
+    const circuitsFolder = './circuits/';
+    const verifications = [];
+
+    for (const event of events) {
+        const [contributionId, participant, reviewer, imageUrl, verifier] = event.args;
+        const degreesToVerify = { latVerify: -23, lonVerify: 18 }
+        const arweaveId = await getArweaveIdFromUrl(imageUrl);
+        const verifierContract = await verifierContracts.find(async (contract) => (await contract.getAddress()).toString() === verifier);
+        const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+            degreesToVerify,
+            `${circuitsFolder}coordinate-circuit-${arweaveId}_js/coordinate-circuit-${arweaveId}.wasm`,
+            `${circuitsFolder}coordinate-circuit-${arweaveId}.zkey`);
+        const solidityCallData = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
+        const convertedCallData = await convertCallData(solidityCallData);
+        const verifyResponse = await verifierContract.connect(reviewerWallets[0]).verifyProof(convertedCallData.a, convertedCallData.b, convertedCallData.c, convertedCallData.input);
+
+        const degreeString = `${degreesToVerify.latVerify}, ${degreesToVerify.lonVerify}`;
+        verifications.push([imageUrl, verifier, degreeString, publicSignals[0], verifyResponse]);
+    }
+
+    return verifications;
 }
 
 
 module.exports = {
 
-    createZKPContracts: async function(CSPlatform, participantWallets, urlCoordinateMapping) {
-        const events = await getContributionReviewedEvents(CSPlatform, 1);
+    createZKPContracts: async function(CSPlatform, participantWallets, reviewerWallets, urlCoordinateMapping) {
+        const reviewEvents = await getContributionReviewedEvents(CSPlatform, 1);
         const urlDegreeMapping = await updateUrlCoordinateMapping(urlCoordinateMapping);
-        await createProofs(urlDegreeMapping);
-        await deployProofs(CSPlatform, participantWallets, events);
 
-        return CSPlatform;
+        await createProofs(urlDegreeMapping);
+        const deployProofsResult = await deployProofs(CSPlatform, participantWallets, reviewEvents);
+        CSPlatform = deployProofsResult.CSPlatform;
+        const verifierContracts = deployProofsResult.verifierContracts;
+
+        const verifierEvents = await getVerifierUpdatedEvents(CSPlatform);
+        const verifications = await verifyProof(CSPlatform, verifierContracts, reviewerWallets, verifierEvents);
+
+
+        return {CSPlatform: CSPlatform, verifications: verifications};
     }
 }

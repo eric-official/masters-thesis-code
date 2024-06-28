@@ -140,5 +140,18 @@ module.exports = {
         }
 
         console.log(table.toString());
+    },
+
+
+    displayVerifications: async function(verifications) {
+        const columns = ['Image', 'Verifier', 'Degrees', 'Verify Result', 'Verify Response'];
+        const table = await createCliTable(columns);
+
+        for (let i = 0; i < verifications.length; i++) {
+            const [image, verifier, coordinates, result, verifyResponse] = verifications[i];
+            table.push([image, verifier, coordinates, result, verifyResponse]);
+        }
+
+        console.log(table.toString());
     }
 }

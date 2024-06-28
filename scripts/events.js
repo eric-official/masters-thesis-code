@@ -1,4 +1,3 @@
-const {formatNumberType} = require("hardhat/common");
 module.exports = {
     getContributionCreatedEvents: async function(CSPlatform) {
         try {
