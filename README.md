@@ -66,22 +66,32 @@ To get a local copy up and running follow these simple example steps.
 ### Installation
 
 1. Open the terminal and change the directory to folder in which you would like to create this project.
-2. Clone the repository
+2. Clone the repository.
    ```sh
    git clone https://github.com/eric-official/masters-thesis-code.git
    ```
-3. Change the directory to the repository folder
+3. Change the directory to the repository folder.
    ```sh
    cd masters-thesis-code
    ```
-4. Install NPM packages
+4. Install the NPM packages.
    ```sh
    npm install
    ```
-5. Enter your API in `config.js`
-   ```js
-   const API_KEY = 'ENTER YOUR API';
+5. Install the SnarkJS package.
+   ```sh
+   npm install -g snarkjs@latest
    ```
+6. Create an `.env` file in the repository folder and add your Akord credentials.
+   ```sh
+   AKORD_EMAIL = <YOUR-EMAIL>
+   AKORD_PASSWORD = "<YOUR-PASSWORD>"
+   ```
+7. Compile the smart contracts
+    ```sh
+    npx hardhat compile
+    ```
+8. 
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
