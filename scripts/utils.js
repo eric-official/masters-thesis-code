@@ -10,11 +10,9 @@ module.exports = {
         try {
             const EMAIL = process.env.AKORD_EMAIL;
             const PASSWORD = process.env.AKORD_PASSWORD;
-            const API_KEY = process.env.AKORD_API_KEY;
             const VAULT_ID = 'L8YrrUseO1dVmmoMN1uAKbTeqwsH37zM-2bKGD3J474';
             const arweaveGatewayUrl = "https://arweave.net/";
 
-            Auth.configure({ apiKey: API_KEY});
             const { wallet } = await Auth.signIn(EMAIL.toString(), PASSWORD.toString())
             const akord = await Akord.init(wallet)
 

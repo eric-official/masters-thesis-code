@@ -15,9 +15,6 @@ node_modules
 
 # Hardhat Ignition default folder for deployments against a local node
 ignition/deployments/chain-31337
-/hardhat.config.js
-/package.json
-/package-lock.json
 
 /circuits
 /contracts/coordinate_verifier-1x0AMo5rNQ49CSSRcRPfvNRcSnZHNyZiP-qkEE0yfuc.sol
@@ -30,3 +27,13 @@ ignition/deployments/chain-31337
 /contracts/coordinate_verifier-mbmDz84Bwg-QJUPti1R_NDppp7GlaKU8B-lIaIl-WeI.sol
 /contracts/coordinate_verifier-NqQee7j8ES8wauzqBOCLg-xB9jNaMCNYB68x3ZpuUgk.sol
 /contracts/coordinate_verifier-Rk9Y8H1ovtcVDit5IsG2SJEZhBqL5Iy_DM9-ZQRx5nk.sol
+/contracts/coordinate-verifier-1x0AMo5rNQ49CSSRcRPfvNRcSnZHNyZiP-qkEE0yfuc.sol
+/contracts/coordinate-verifier-7kHJd52Gc-eGKwrNtQ5SU7JULtUEMN6Rrr_Fh5ZzKBI.sol
+/contracts/coordinate-verifier-9xxe9BJVc8GuLiwcQ1b-tJ13AZjk8M2Htro-Ho_Tty4.sol
+/contracts/coordinate-verifier-Gzpb6toLQtpzWr2dItEmtbutSOWmFH1LOQh2uxd8nck.sol
+/contracts/coordinate-verifier-HQjn6bjPJ7ZVFqD5OT9ZZi5f6G6aQ1EsAY71ArKs718.sol
+/contracts/coordinate-verifier-I30T_ukE7QGYMPEJv3BMvTfftqyl0UbgMoovNUXCNTw.sol
+/contracts/coordinate-verifier-id5oYIqwOfW_NAEquZJSMRxKov7IRfYREJ03eJCtWZQ.sol
+/contracts/coordinate-verifier-mbmDz84Bwg-QJUPti1R_NDppp7GlaKU8B-lIaIl-WeI.sol
+/contracts/coordinate-verifier-NqQee7j8ES8wauzqBOCLg-xB9jNaMCNYB68x3ZpuUgk.sol
+/contracts/coordinate-verifier-Rk9Y8H1ovtcVDit5IsG2SJEZhBqL5Iy_DM9-ZQRx5nk.sol
