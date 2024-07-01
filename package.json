@@ -1,0 +1,24 @@
+{
+  "name": "masters-thesis-code",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.5"
+  },
+  "dependencies": {
+    "@akord/akord-js": "^5.11.0",
+    "@colors/colors": "^1.6.0",
+    "circomlib": "^2.0.5",
+    "cli-table3": "^0.6.5",
+    "dotenv": "^16.4.5",
+    "eccrypto": "^1.1.6",
+    "snarkjs": "^0.7.4"
+  }
+}
