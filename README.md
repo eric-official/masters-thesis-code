@@ -91,7 +91,6 @@ To get a local copy up and running follow these simple example steps.
     ```sh
     npx hardhat compile
     ```
-8. 
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

@@ -9,7 +9,7 @@ const { getContributionReviewedEvents, getVerifierUpdatedEvents } = require('./e
 const { updateUrlCoordinateMapping, getArweaveIdFromUrl} = require('./utils');
 
 
-async function createCircuit(lat, lon) {
+async function createCircuitCode(lat, lon) {
     return `
         pragma circom 2.0.0;
     
@@ -46,6 +46,49 @@ async function createCircuit(lat, lon) {
         component main = CoordinateInGrid(${lat}, ${lon});`
 }
 
+
+async function createCircuitFiles(url, circuitContent, circuitFolder) {
+    const arweaveId = await getArweaveIdFromUrl(url);
+    await fs.writeFileSync(`coordinate-circuit-${arweaveId}.circom`, circuitContent);
+    await execSync(`circom coordinate-circuit-${arweaveId}.circom --r1cs --wasm --sym -o ./circuits`);
+    await execSync(`snarkjs groth16 setup ${circuitFolder}coordinate-circuit-${arweaveId}.r1cs data/pot14_final.ptau ${circuitFolder}coordinate-circuit-${arweaveId}.zkey -o`);
+    await execSync(`snarkjs zkey export solidityverifier ${circuitFolder}coordinate-circuit-${arweaveId}.zkey ${circuitFolder}coordinate-verifier-${arweaveId}.sol`);
+}
+
+async function moveVerifierContracts(circuitFolder) {
+    const circuitFolderFiles = fs.readdirSync(circuitFolder);
+    const solidityFiles = circuitFolderFiles.filter(file => file.endsWith('.sol'));
+    for (const file of solidityFiles) {
+        await fs.renameSync(`${circuitFolder}${file}`, `contracts/${file}`);
+    }
+}
+
+async function moveCircomFiles(circuitFolder) {
+    const projectFolderFiles = fs.readdirSync('./');
+    const circomFiles = projectFolderFiles.filter(file => file.endsWith('.circom'));
+    for (const file of circomFiles) {
+        await fs.renameSync(`${file}`, `${circuitFolder}${file}`);
+    }
+}
+
+async function deployVerifierContract(verifierPath) {
+    const verifierFactory = await ethers.getContractFactory(verifierPath);
+    const verifierContract = await verifierFactory.deploy();
+     return await verifierContract.waitForDeployment();
+}
+
+async function addVerifierToCSPlatform(CSPlatform, verifierPath, verifierAddress, events, participantWallets) {
+    const cleanedVerifierPath = verifierPath.replace("contracts/coordinate-verifier-", "").replace(".sol:Groth16Verifier", "");
+    const imageUrl = `https://arweave.net/${cleanedVerifierPath}`;
+    const contribution = events.find(event => event.args.imageUrl === imageUrl);
+
+    const participantIndex = participantWallets.findIndex(wallet => wallet.address === contribution.args.participant);
+    const updateVerifierResponse1 = await CSPlatform.connect(participantWallets[participantIndex]).updateVerifier(verifierAddress, contribution.args.contributionId);
+    await updateVerifierResponse1.wait();
+
+    return CSPlatform;
+}
+
 async function convertCallData(calldata) {
     const argv = calldata
         .replace(/["[\]\s]/g, "")
@@ -73,28 +116,13 @@ async function createProofs(urlDegreeMapping) {
 
     try {
         for (const [url, degrees] of Object.entries(urlDegreeMapping)) {
-            const circuitContent = await createCircuit(degrees.lat, degrees.lon);
-            const arweaveId = await getArweaveIdFromUrl(url);
-            await fs.writeFileSync(`coordinate-circuit-${arweaveId}.circom`, circuitContent);
-            await execSync(`circom coordinate-circuit-${arweaveId}.circom --r1cs --wasm --sym -o ./circuits`);
-            await execSync(`snarkjs groth16 setup ${circuitFolder}coordinate-circuit-${arweaveId}.r1cs data/pot14_final.ptau ${circuitFolder}coordinate-circuit-${arweaveId}.zkey -o`);
-            await execSync(`snarkjs zkey export solidityverifier ${circuitFolder}coordinate-circuit-${arweaveId}.zkey ${circuitFolder}coordinate-verifier-${arweaveId}.sol`);
+            const circuitContent = await createCircuitCode(degrees.lat, degrees.lon);
+            await createCircuitFiles(url, circuitContent, circuitFolder);
         }
 
-        // move all solidity files from circuit folder to contracts folder
-        const circuitFolderFiles = fs.readdirSync(circuitFolder);
-        const solidityFiles = circuitFolderFiles.filter(file => file.endsWith('.sol'));
-        for (const file of solidityFiles) {
-            await fs.renameSync(`${circuitFolder}${file}`, `contracts/${file}`);
-        }
+        await moveVerifierContracts(circuitFolder);
         await execSync('npx hardhat compile');
-
-        // move all coordinate-circuit files from project folder to circuits folder
-        const projectFolderfiles = fs.readdirSync('./');
-        const circomFiles = projectFolderfiles.filter(file => file.endsWith('.circom'));
-        for (const file of circomFiles) {
-            await fs.renameSync(`${file}`, `${circuitFolder}${file}`);
-        }
+        await moveCircomFiles(circuitFolder);
 
     } catch (error) {
         console.log("Error while generating proof!", error);
@@ -111,19 +139,10 @@ async function deployProofs(CSPlatform, participantWallets, events) {
     const verifierContracts = [];
 
     for (const verifierPath of verifierPaths) {
-        const verifierFactory = await ethers.getContractFactory(verifierPath);
-        const verifierContract = await verifierFactory.deploy();
-        await verifierContract.waitForDeployment();
+        const verifierContract = await deployVerifierContract(verifierPath);
         const verifierAddress = await verifierContract.getAddress()
         verifierContracts.push(verifierContract);
-
-        const cleanedVerifierPath = verifierPath.replace("contracts/coordinate-verifier-", "").replace(".sol:Groth16Verifier", "");
-        const imageUrl = `https://arweave.net/${cleanedVerifierPath}`;
-        const contribution = events.find(event => event.args.imageUrl === imageUrl);
-
-        const participantIndex = participantWallets.findIndex(wallet => wallet.address === contribution.args.participant);
-        const updateVerifierResponse1 = await CSPlatform.connect(participantWallets[participantIndex]).updateVerifier(verifierAddress, contribution.args.contributionId);
-        await updateVerifierResponse1.wait();
+        CSPlatform = await addVerifierToCSPlatform(CSPlatform, verifierPath, verifierAddress, events, participantWallets);
     }
 
     return {CSPlatform: CSPlatform, verifierContracts: verifierContracts};
