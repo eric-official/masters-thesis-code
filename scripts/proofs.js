@@ -2,13 +2,17 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const snarkjs = require('snarkjs')
 const {ethers} = require('hardhat')
-
-
-
 const { getContributionReviewedEvents, getVerifierUpdatedEvents } = require('./events');
 const { updateUrlCoordinateMapping, getArweaveIdFromUrl} = require('./utils');
 
 
+/**
+ * Create a circuit to verify if a given latitude and longitude are equal to contribution
+ * @param lat - latitude of coordinate in the contribution
+ * @param lon - longitude of coordinate in the contribution
+ * @returns {Promise<string>}
+ * @type {(lat: number, lon: number) => Promise<string>}
+ */
 async function createCircuitCode(lat, lon) {
     return `
         pragma circom 2.0.0;
@@ -47,6 +51,14 @@ async function createCircuitCode(lat, lon) {
 }
 
 
+/**
+ * Create circuit files for a given URL
+ * @param url - URL of the contribution
+ * @param circuitContent - content of the circuit
+ * @param circuitFolder - folder to store the circuit files
+ * @returns {Promise<void>}
+ * @type {(url: string, circuitContent: string, circuitFolder: string) => Promise<void>}
+ */
 async function createCircuitFiles(url, circuitContent, circuitFolder) {
     const arweaveId = await getArweaveIdFromUrl(url);
     await fs.writeFileSync(`coordinate-circuit-${arweaveId}.circom`, circuitContent);
@@ -55,6 +67,13 @@ async function createCircuitFiles(url, circuitContent, circuitFolder) {
     await execSync(`snarkjs zkey export solidityverifier ${circuitFolder}coordinate-circuit-${arweaveId}.zkey ${circuitFolder}coordinate-verifier-${arweaveId}.sol`);
 }
 
+
+/**
+ * Move verifier contracts to the contracts folder
+ * @param circuitFolder - folder containing the verifier contracts
+ * @returns {Promise<void>}
+ * @type {(circuitFolder: string) => Promise<void>}
+ */
 async function moveVerifierContracts(circuitFolder) {
     const circuitFolderFiles = fs.readdirSync(circuitFolder);
     const solidityFiles = circuitFolderFiles.filter(file => file.endsWith('.sol'));
@@ -63,6 +82,13 @@ async function moveVerifierContracts(circuitFolder) {
     }
 }
 
+
+/**
+ * Move circom files to the circuits folder
+ * @param circuitFolder - destination folder containing the circom files
+ * @returns {Promise<void>}
+ * @type {(circuitFolder: string) => Promise<void>}
+ */
 async function moveCircomFiles(circuitFolder) {
     const projectFolderFiles = fs.readdirSync('./');
     const circomFiles = projectFolderFiles.filter(file => file.endsWith('.circom'));
@@ -71,12 +97,30 @@ async function moveCircomFiles(circuitFolder) {
     }
 }
 
+
+/**
+ * Deploy verifier contract
+ * @param verifierPath - directory path of the verifier contract
+ * @returns {Promise<ethers.BaseContract>}
+ * @type {(verifierPath: string) => Promise<ethers.BaseContract>}
+ */
 async function deployVerifierContract(verifierPath) {
     const verifierFactory = await ethers.getContractFactory(verifierPath);
     const verifierContract = await verifierFactory.deploy();
-     return await verifierContract.waitForDeployment();
+    return await verifierContract.waitForDeployment();
 }
 
+
+/**
+ * Add verifier to the contribution in CSPlatform contract
+ * @param CSPlatform - CSPlatform contract
+ * @param verifierPath - directory path of the verifier contract
+ * @param verifierAddress - address of the verifier contract
+ * @param events - list of ContributionReviewed events
+ * @param participantWallets - wallets of participants
+ * @returns {Promise<CSPlatform>}
+ * @type {(CSPlatform: CSPlatform, verifierPath: string, verifierAddress: string, events: Array, participantWallets: Array) => Promise<CSPlatform>}
+ */
 async function addVerifierToCSPlatform(CSPlatform, verifierPath, verifierAddress, events, participantWallets) {
     const cleanedVerifierPath = verifierPath.replace("contracts/coordinate-verifier-", "").replace(".sol:Groth16Verifier", "");
     const imageUrl = `https://arweave.net/${cleanedVerifierPath}`;
@@ -89,6 +133,13 @@ async function addVerifierToCSPlatform(CSPlatform, verifierPath, verifierAddress
     return CSPlatform;
 }
 
+
+/**
+ * Convert solidity call data to separate arrays
+ * @param calldata - solidity call data
+ * @returns {Promise<{a: *[], input: *[], b: *[][], c: *[]}>}
+ * @type {(calldata: string) => Promise<{a: Array<string>, b: Array<String>, c: Array<Array<String>, Array<String>>, input: Array<String>}>}
+ */
 async function convertCallData(calldata) {
     const argv = calldata
         .replace(/["[\]\s]/g, "")
@@ -106,6 +157,13 @@ async function convertCallData(calldata) {
     return { a, b, c, input };
 }
 
+
+/**
+ * Create proofs for all contributions
+ * @param urlDegreeMapping - mapping of image URLs to degrees
+ * @returns {Promise<void>}
+ * @type {(urlDegreeMapping: Object) => Promise<void>}
+ */
 async function createProofs(urlDegreeMapping) {
 
     const circuitFolder = './circuits/';
@@ -130,6 +188,14 @@ async function createProofs(urlDegreeMapping) {
 }
 
 
+/**
+ * Deploy verifier contracts and add them to CSPlatform contract
+ * @param CSPlatform - CSPlatform contract
+ * @param participantWallets - wallets of participants
+ * @param events - list of ContributionReviewed events
+ * @returns {Promise<{CSPlatform, verifierContracts: *[]}>}
+ * @type {(CSPlatform: CSPlatform, participantWallets: Array, events: Array) => Promise<{CSPlatform: CSPlatform, verifierContracts: Array}>}
+ */
 async function deployProofs(CSPlatform, participantWallets, events) {
     const contractFolder = 'contracts/';
     const files = fs.readdirSync(contractFolder);
@@ -149,6 +215,16 @@ async function deployProofs(CSPlatform, participantWallets, events) {
 }
 
 
+/**
+ * verify previously created proofs
+ * @param CSPlatform - CSPlatform contract
+ * @param verifierContracts - list of verifier contracts
+ * @param reviewerWallets - wallets of reviewers
+ * @param events - list of VerifierUpdated events
+ * @param urlDegreeMapping - mapping of image URLs to degrees
+ * @returns {Promise<Array.<string, string, string, number, bool>>}
+ * @type {(CSPlatform: CSPlatform, verifierContracts: Array, reviewerWallets: Array, events: Array, urlDegreeMapping: Object) => Promise<Array.<string, string, string, number, bool>>}
+ */
 async function verifyProof(CSPlatform, verifierContracts, reviewerWallets, events, urlDegreeMapping) {
     const circuitsFolder = './circuits/';
     const verifications = [];

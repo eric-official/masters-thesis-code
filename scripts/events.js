@@ -1,4 +1,11 @@
 module.exports = {
+
+    /**
+     * Get all ContributionCreated events
+     * @param CSPlatform - CSPlatform contract
+     * @returns {Promise<Array.<ethers.EventLog>>}
+     * @type {(CSPlatform: CSPlatform) => Promise<Array.<ethers.EventLog>>}
+     */
     getContributionCreatedEvents: async function(CSPlatform) {
         try {
             const filter = CSPlatform.filters.ContributionCreated;
@@ -9,6 +16,12 @@ module.exports = {
     },
 
 
+    /**
+     * Get all ContributionAssigned events
+     * @param CSPlatform - CSPlatform contract
+     * @returns {Promise<Array<ethers.EventLog>>}
+     * @type {(CSPlatform: CSPlatform) => Promise<Array<ethers.EventLog>>}
+     */
     getContributionAssignedEvents: async function(CSPlatform) {
         try {
             const filter = CSPlatform.filters.ContributionAssigned;
@@ -19,6 +32,12 @@ module.exports = {
     },
 
 
+    /**
+     * Get all CoordinateUpdated events
+     * @param CSPlatform - CSPlatform contract
+     * @returns {Promise<Array<ethers.EventLog>>}
+     * @type {(CSPlatform: CSPlatform) => Promise<Array<ethers.EventLog>>}
+     */
     getCoordinateUpdatedEvents: async function(CSPlatform) {
         try {
             const filter = CSPlatform.filters.CoordinateUpdated;
@@ -29,6 +48,13 @@ module.exports = {
     },
 
 
+    /**
+     * Get all ContributionReviewed events
+     * @param CSPlatform - CSPlatform contract
+     * @param result - filter for a specific result of the review
+     * @returns {Promise<Array<ethers.EventLog>>}
+     * @type {(CSPlatform: CSPlatform, result: number) => Promise<Array<ethers.EventLog>>}
+     */
     getContributionReviewedEvents: async function(CSPlatform, result=NaN) {
         try {
             const filter = CSPlatform.filters.ContributionReviewed;
@@ -46,6 +72,12 @@ module.exports = {
     },
 
 
+    /**
+     * Get all VerifierUpdated events
+     * @param CSPlatform - CSPlatform contract
+     * @returns {Promise<Array<ethers.EventLog>>}
+     * @type {(CSPlatform: CSPlatform) => Promise<Array<ethers.EventLog>>}
+     */
     getVerifierUpdatedEvents: async function(CSPlatform) {
         try {
             const filter = CSPlatform.filters.VerifierUpdated;
