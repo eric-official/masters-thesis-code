@@ -73,7 +73,7 @@ contract CSPlatform {
         emit ContributionCreated(msg.sender, _imageUrl);
     }
 
-    // TODO: Implement random number with Chainlink VRF
+    // TODO: Implement random number with Chainlink VRF and increase quality
     function assignContribution() public unassignedContributionExists {
         uint random = uint256(keccak256(abi.encodePacked(
                 tx.origin,

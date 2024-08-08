@@ -6,6 +6,11 @@ require('dotenv').config();
 
 module.exports = {
 
+    /**
+     * Get all image URLs from Akord vault
+     * @returns {Promise<Array<String>>}
+     * @type {() => Promise<Array<String>>}
+     */
     getImageURLs: async function () {
         try {
             const EMAIL = process.env.AKORD_EMAIL;
@@ -25,6 +30,12 @@ module.exports = {
     },
 
 
+    /**
+     * Format the encrypted coordinates into a hex string
+     * @param encryptedCoordinates - Encrypted coordinates object
+     * @returns {Promise<string>}
+     * @type {(encryptedCoordinates: Object) => Promise<string>}
+     */
     formatCoordinatesToBytes: async function (encryptedCoordinates) {
         // Concatenate parts into a single Buffer
         const encryptedData = Buffer.concat([
@@ -39,6 +50,12 @@ module.exports = {
     },
 
 
+    /**
+     * Format the encrypted coordinates from a hex string into a decryptable object
+     * @param encryptedCoordinatesBytes - Encrypted coordinates hex string
+     * @returns {Promise<{ciphertext: Buffer, iv: Buffer, mac: Buffer, ephemPublicKey: Buffer}>}
+     * @type {(encryptedCoordinatesBytes: string) => Promise<{ciphertext: Buffer, iv: Buffer, mac: Buffer, ephemPublicKey: Buffer}>}
+     */
     formatCoordinatesFromBytes: async function (encryptedCoordinatesBytes) {
         // Convert the hex string to a Buffer
         const encryptedCoordinatesBuffer = Buffer.from(encryptedCoordinatesBytes.slice(2), "hex");
@@ -66,6 +83,12 @@ module.exports = {
     },
 
 
+    /**
+     * Create a CLI table with the specified columns
+     * @param columns - Array of column names
+     * @returns {Promise<Table.GenericTable>}
+     * @type {(columns: Array<String>) => Promise<Table.GenericTable>}
+     */
     createCliTable: async function (columns) {
         const columnWidths = {
             'Wallet': 15,
@@ -90,6 +113,11 @@ module.exports = {
     },
 
 
+    /**
+     * Extract latitude and longitude degrees from a coordinate string
+     * @param coordinate - Coordinate string in the format "XX° XX' XX.XX N/S, XX° XX' XX.XX E/W"
+     * @returns {Promise<{lon: (number|number), lat: (number|number)}>}
+     */
     extractDegreesFromCoordinate: async function(coordinate) {
         // Regex to match the coordinate format
         const regex = /(\d+)° (\d+)' (\d+\.\d+)" ([NS]), (\d+)° (\d+)' (\d+\.\d+)" ([EW])/;
@@ -117,6 +145,12 @@ module.exports = {
         };
     },
 
+
+    /**
+     * Update the URL to coordinate mapping with the extracted degrees
+     * @param urlCoordinateMapping - Mapping of URLs to coordinates
+     * @returns {Promise<{}>}
+     */
     updateUrlCoordinateMapping: async function(urlCoordinateMapping) {
         const urlDegreeMapping = {};
         for (const [url, coordinate] of Object.entries(urlCoordinateMapping)) {
