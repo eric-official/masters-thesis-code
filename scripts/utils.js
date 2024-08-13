@@ -148,13 +148,13 @@ module.exports = {
 
     /**
      * Update the URL to coordinate mapping with the extracted degrees
-     * @param urlCoordinateMapping - Mapping of URLs to coordinates
+     * @param contributionData - Mapping of URLs to coordinates
      * @returns {Promise<{}>}
      */
-    updateUrlCoordinateMapping: async function(urlCoordinateMapping) {
+    updateContributionData: async function(contributionData) {
         const urlDegreeMapping = {};
-        for (const [url, coordinate] of Object.entries(urlCoordinateMapping)) {
-            urlDegreeMapping[url] = await module.exports.extractDegreesFromCoordinate(coordinate);
+        for (const [url, data] of Object.entries(contributionData)) {
+            urlDegreeMapping[url] = await module.exports.extractDegreesFromCoordinate(data.coordinates);
         }
 
         return urlDegreeMapping;

@@ -3,7 +3,7 @@ const fs = require('fs');
 const snarkjs = require('snarkjs')
 const {ethers} = require('hardhat')
 const { getContributionReviewedEvents, getVerifierUpdatedEvents } = require('./events');
-const { updateUrlCoordinateMapping, getArweaveIdFromUrl} = require('./utils');
+const { updateContributionData, getArweaveIdFromUrl} = require('./utils');
 
 
 /**
@@ -252,9 +252,9 @@ async function verifyProof(CSPlatform, verifierContracts, reviewerWallets, event
 
 module.exports = {
 
-    createZKPContracts: async function(CSPlatform, participantWallets, reviewerWallets, urlCoordinateMapping) {
+    createZKPContracts: async function(CSPlatform, participantWallets, reviewerWallets, contributionData) {
         const reviewEvents = await getContributionReviewedEvents(CSPlatform, 1);
-        const urlDegreeMapping = await updateUrlCoordinateMapping(urlCoordinateMapping);
+        const urlDegreeMapping = await updateContributionData(contributionData);
 
         await createProofs(urlDegreeMapping);
         const deployProofsResult = await deployProofs(CSPlatform, participantWallets, reviewEvents);
