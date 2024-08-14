@@ -49,7 +49,7 @@ contract CSPlatform {
     event ContributionReviewed(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl, int result);
     event VerifierUpdated(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl, address verifier);
 
-    constructor() {
+    constructor() payable {
         users[msg.sender] = User(
             reviewReputation,
             0,
@@ -172,6 +172,7 @@ contract CSPlatform {
         contribution.dataQuality = calculateDataQuality(resultInt, _imageAssessment);
         updateReviewedContribution(contribution, resultInt, _contributionId);
         updateReviewUsers(contribution);
+        rewardReviewUsers(contribution.dataQuality, contribution.participant, contribution.reviewer);
 
         //console.log(contribution.participant);
         //console.logInt(int256(SD59x18.unwrap(users[contribution.participant].reputation)));
@@ -224,6 +225,14 @@ contract CSPlatform {
         users[msg.sender].reputation = reviewerReputation;
     }
 
+    function rewardReviewUsers(SD59x18 _dataQuality, address _participant, address _reviewer) private {
+        SD59x18 participantReward = calculateParticipantReward(_dataQuality, users[_participant].reputation);
+        SD59x18 reviewerReward = calculateReviewerReward(users[_reviewer].reputation);
+
+        sendViaCall(payable(_participant), int256(unwrap(participantReward)));
+        sendViaCall(payable(_reviewer), int256(unwrap(reviewerReward)));
+    }
+
     function calculateDataQuality(int _result, int _imageAssessment) private pure returns (SD59x18) {
         SD59x18 dataQuality;
         if (_result == -1) {
@@ -261,6 +270,20 @@ contract CSPlatform {
         return result;
     }
 
+    function calculateParticipantReward(SD59x18 _dataQuality, SD59x18 _reputation) private pure returns (SD59x18) {
+        SD59x18 reward = sd(0.0065e18) * (sd(1e18) + sd(5e17).mul(_dataQuality)) * (sd(1e18) + sd(1e17) * _reputation);
+        return reward;
+    }
+
+    function calculateReviewerReward(SD59x18 _reputation) private pure returns (SD59x18) {
+        SD59x18 reward = sd(0.0002e18) * (sd(1e18) + sd(1e17) * _reputation);
+        return reward;
+    }
+
+    function sendViaCall(address payable _to, int256 value) public payable {
+        (bool sent, bytes memory data) = _to.call{value: uint256(value)}(""); // Returns false on failure
+        require(sent, "Failed to send Ether");
+    }
 
     modifier unassignedContributionExists() {
         require(unassignedContributions.length > 0, "No unassigned contributions available");

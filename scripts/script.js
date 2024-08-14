@@ -51,7 +51,6 @@ async function createContributions(numContributions, CSPlatform, participantWall
         const imageIndex = (i + imageUrls.length) % imageUrls.length;
         const imageUrl = imageUrls[imageIndex];
         const animalSpecies = contributionData[imageUrl].animalSpecies;
-        console.log("Animal Species: ", animalSpecies)
 
         const createContributionResponse1 = await CSPlatform.connect(participantWallet).createContribution(imageUrl, Date.now(), animalSpecies);
         await createContributionResponse1.wait();
@@ -102,16 +101,20 @@ async function updateCoordinates(CSPlatform, participantWallets, reviewerWallets
 }
 
 
-async function reviewContributions(CSPlatform, reviewerWallets) {
+async function reviewContributions(CSPlatform, reviewerWallets, provider) {
     const events = await getContributionAssignedEvents(CSPlatform);
 
     for (let i = 0; i < events.length; i++) {
         const event = events[i];
         const [id, participant, reviewer, image] = event.args;
 
+        console.log(reviewer)
+        console.log(await provider.getBalance(reviewer))
         const reviewerIndex = reviewerWallets.findIndex(wallet => wallet.address === reviewer);
         const reviewResponse = await CSPlatform.connect(reviewerWallets[reviewerIndex]).reviewContribution(id, -1, 1, 1, 1, 5);
         await reviewResponse.wait();
+        console.log(await provider.getBalance(reviewer))
+
     }
 
     return CSPlatform;
@@ -149,7 +152,9 @@ async function main() {
 
     console.log("Deploying CSPlatform...");
     const CSPlatformFactory = await ethers.getContractFactory("CSPlatform");
-    let CSPlatform = await CSPlatformFactory.deploy();
+    let CSPlatform = await CSPlatformFactory.deploy({
+        value: ethers.parseEther("100") // 1 Ether, adjust the amount as needed
+    });
     await CSPlatform.waitForDeployment();
     console.log("CSPlatform deployed to:", await CSPlatform.getAddress());
     console.log(" ");
@@ -182,7 +187,7 @@ async function main() {
     console.log("Coordinates decrypted!");
 
     console.log("Review contributions...");
-    CSPlatform = await reviewContributions(CSPlatform, reviewerWallets);
+    CSPlatform = await reviewContributions(CSPlatform, reviewerWallets, provider);
     await displayReviewedContributions(CSPlatform);
     console.log("Contributions reviewed!");
 
