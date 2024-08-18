@@ -125,52 +125,10 @@ contract CSPlatform {
         emit CoordinateUpdated(_contributionId, msg.sender, contribution.reviewer, contribution.imageUrl, _coordinates);
     }
 
-    /*function reviewContribution(uint _contributionId, int _urlAssessment, int _timestampAssessment, int _coordinatesAssessment, int _animalSpeciesAssessment, int _imageAssessment) public {
-        Contribution storage contribution = assignedContributions[_contributionId];
-        int resultInt;
-
-        if (_urlAssessment == -1 || _timestampAssessment == -1 || _coordinatesAssessment == -1 || _animalSpeciesAssessment == -1) {
-            contribution.result = ContributionResult.Punished;
-            freeContributionsIdx.push(_contributionId);
-            resultInt = -1;
-        } else if (_urlAssessment == 0 || _timestampAssessment == 0 || _coordinatesAssessment == 0 || _animalSpeciesAssessment == 0) {
-            contribution.result = ContributionResult.Rejected;
-            freeContributionsIdx.push(_contributionId);
-            resultInt = 0;
-        } else {
-            contribution.result = ContributionResult.Accepted;
-            resultInt = 1;
-            users[contribution.participant].nContributions++;
-        }
-
-        contribution.dataQuality = calculateDataQuality(resultInt, _imageAssessment);
-        SD59x18 participantMultiplier = calculateMultiplier(users[contribution.participant].nContributions, users[contribution.participant].nReviews);
-        SD59x18 reviewerMultiplier = calculateMultiplier(users[contribution.reviewer].nContributions, users[contribution.reviewer].nReviews);
-        SD59x18 participantReputation = calculateReputation(contribution.dataQuality, participantMultiplier, users[contribution.participant].reputation);
-        SD59x18 reviewerReputation = calculateReputation(sd(0.005e18), reviewerMultiplier, users[msg.sender].reputation);
-
-        contribution.status = ContributionStatus.Reviewed;
-        assignedContributions[_contributionId] = contribution;
-
-        users[contribution.participant].openContributions--;
-        users[contribution.participant].reputation = participantReputation;
-        users[contribution.reviewer].openReview = false;
-        users[contribution.reviewer].nReviews++;
-        users[contribution.reviewer].reputation = reviewerReputation;
-
-        console.log(contribution.participant);
-        console.logInt(int256(SD59x18.unwrap(participantMultiplier) / 1e17));
-        console.logInt(int256(SD59x18.unwrap(participantReputation)));
-
-
-    emit ContributionReviewed(_contributionId, contribution.participant, contribution.reviewer, contribution.imageUrl, 1);
-    }*/
-
     function reviewContribution(uint _contributionId, int _urlAssessment, int _timestampAssessment, int _coordinatesAssessment, int _animalSpeciesAssessment, int _imageAssessment) public {
         Contribution storage contribution = assignedContributions[_contributionId];
-        int resultInt = calculateReviewResult(_urlAssessment, _timestampAssessment, _coordinatesAssessment, _animalSpeciesAssessment);
+        int resultInt = calculateReviewResult(contribution, _contributionId, _urlAssessment, _timestampAssessment, _coordinatesAssessment, _animalSpeciesAssessment);
         contribution.dataQuality = calculateDataQuality(resultInt, _imageAssessment);
-        updateReviewedContribution(contribution, resultInt, _contributionId);
         updateReviewUsers(contribution);
         rewardReviewUsers(contribution.dataQuality, contribution.participant, contribution.reviewer);
 
@@ -186,27 +144,20 @@ contract CSPlatform {
         emit VerifierUpdated(_contributionId, contribution.participant, contribution.reviewer, contribution.imageUrl, _verifier);
     }
 
-    function calculateReviewResult(int _urlAssessment, int _timestampAssessment, int _coordinatesAssessment, int _animalSpeciesAssessment) private pure returns (int) {
+    function calculateReviewResult(Contribution storage contribution, uint _contributionId, int _urlAssessment, int _timestampAssessment, int _coordinatesAssessment, int _animalSpeciesAssessment) private returns (int){
+        contribution.status = ContributionStatus.Reviewed;
         if (_urlAssessment == -1 || _timestampAssessment == -1 || _coordinatesAssessment == -1 || _animalSpeciesAssessment == -1) {
-            return -1;
-        } else if (_urlAssessment == 0 || _timestampAssessment == 0 || _coordinatesAssessment == 0 || _animalSpeciesAssessment == 0) {
-            return 0;
-        } else {
-            return 1;
-        }
-    }
-
-    function updateReviewedContribution(Contribution storage contribution, int resultInt, uint _contributionId) private {
-        if (resultInt == -1) {
             contribution.result = ContributionResult.Punished;
             freeContributionsIdx.push(_contributionId);
-        } else if (resultInt == 0) {
+            return -1;
+        } else if (_urlAssessment == 0 || _timestampAssessment == 0 || _coordinatesAssessment == 0 || _animalSpeciesAssessment == 0) {
             contribution.result = ContributionResult.Rejected;
             freeContributionsIdx.push(_contributionId);
+            return 0;
         } else {
             contribution.result = ContributionResult.Accepted;
+            return 1;
         }
-        contribution.status = ContributionStatus.Reviewed;
     }
 
     function updateReviewUsers(Contribution storage contribution) private {
@@ -241,7 +192,7 @@ contract CSPlatform {
             dataQuality = sd(0.00e18);
         } else if (_result == 1) {
             SD59x18 imageAssessment = sd(_imageAssessment * 1e18);
-            dataQuality = sd(1e18).mul(imageAssessment).div(sd(5e18));
+            dataQuality = imageAssessment.div(sd(5e18));
         }
     return dataQuality;
     }

@@ -129,10 +129,12 @@ module.exports = {
 
         // Extract latitude degrees and direction
         const latDegrees = parseInt(match[1]);
+        const latMin = parseInt(match[2]);
         const latDirection = match[4];
 
         // Extract longitude degrees and direction
         const longDegrees = parseInt(match[5]);
+        const longMin = parseInt(match[6]);
         const longDirection = match[8];
 
         // Adjust for direction
@@ -140,8 +142,10 @@ module.exports = {
         const longitude = longDirection === 'W' ? -longDegrees : longDegrees;
 
         return {
-            lat: latitude,
-            lon: longitude
+            latDeg: latitude,
+            latMin: latMin,
+            longDeg: longitude,
+            longMin: longMin
         };
     },
 
@@ -152,12 +156,12 @@ module.exports = {
      * @returns {Promise<{}>}
      */
     updateContributionData: async function(contributionData) {
-        const urlDegreeMapping = {};
+        const urlCoordinatesMapping = {};
         for (const [url, data] of Object.entries(contributionData)) {
-            urlDegreeMapping[url] = await module.exports.extractDegreesFromCoordinate(data.coordinates);
+            urlCoordinatesMapping[url] = await module.exports.extractDegreesFromCoordinate(data.coordinates);
         }
 
-        return urlDegreeMapping;
+        return urlCoordinatesMapping;
     },
 
 

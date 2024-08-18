@@ -111,7 +111,7 @@ async function reviewContributions(CSPlatform, reviewerWallets, provider) {
         console.log(reviewer)
         console.log(await provider.getBalance(reviewer))
         const reviewerIndex = reviewerWallets.findIndex(wallet => wallet.address === reviewer);
-        const reviewResponse = await CSPlatform.connect(reviewerWallets[reviewerIndex]).reviewContribution(id, -1, 1, 1, 1, 5);
+        const reviewResponse = await CSPlatform.connect(reviewerWallets[reviewerIndex]).reviewContribution(id, 1, 1, 1, 1, 5);
         await reviewResponse.wait();
         console.log(await provider.getBalance(reviewer))
 

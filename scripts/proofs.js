@@ -13,41 +13,251 @@ const { updateContributionData, getArweaveIdFromUrl} = require('./utils');
  * @returns {Promise<string>}
  * @type {(lat: number, lon: number) => Promise<string>}
  */
-async function createCircuitCode(lat, lon) {
+async function createCircuitCode(imageLatDeg, imageLatMin, imageLongDeg, imageLongMin) {
     return `
         pragma circom 2.0.0;
+
+    include "node_modules/circomlib/circuits/comparators.circom";
     
-        include "node_modules/circomlib/circuits/pedersen.circom";
-        include "node_modules/circomlib/circuits/comparators.circom";
+    
+    template IsMinuteInGrid() {
+        signal input verifyMinute;
+        signal output out;
+    
+        signal gridPointArray[10] <== [0, 6, 12, 18, 24, 30, 36, 42, 48, 54];
+    
+        component isEqual0 = IsEqual();
+        isEqual0.in[0] <== verifyMinute;
+        isEqual0.in[1] <== gridPointArray[0];
+        signal isEqual0Out <== isEqual0.out;
+        signal result0 <== isEqual0Out;
+    
+        component isEqual1 = IsEqual();
+        isEqual1.in[0] <== verifyMinute;
+        isEqual1.in[1] <== gridPointArray[1];
+        signal isEqual1Out <== isEqual1.out;
+        signal result1 <== isEqual1Out + result0;
+    
+        component isEqual2 = IsEqual();
+        isEqual2.in[0] <== verifyMinute;
+        isEqual2.in[1] <== gridPointArray[2];
+        signal isEqual2Out <== isEqual2.out;
+        signal result2 <== isEqual2Out + result1;
+    
+        component isEqual3 = IsEqual();
+        isEqual3.in[0] <== verifyMinute;
+        isEqual3.in[1] <== gridPointArray[3];
+        signal isEqual3Out <== isEqual3.out;
+        signal result3 <== isEqual3Out + result2;
+    
+        component isEqual4 = IsEqual();
+        isEqual4.in[0] <== verifyMinute;
+        isEqual4.in[1] <== gridPointArray[4];
+        signal isEqual4Out <== isEqual4.out;
+        signal result4 <== isEqual4Out + result3;
+    
+        component isEqual5 = IsEqual();
+        isEqual5.in[0] <== verifyMinute;
+        isEqual5.in[1] <== gridPointArray[5];
+        signal isEqual5Out <== isEqual5.out;
+        signal result5 <== isEqual5Out + result4;
+    
+        component isEqual6 = IsEqual();
+        isEqual6.in[0] <== verifyMinute;
+        isEqual6.in[1] <== gridPointArray[6];
+        signal isEqual6Out <== isEqual6.out;
+        signal result6 <== isEqual6Out + result5;
+    
+        component isEqual7 = IsEqual();
+        isEqual7.in[0] <== verifyMinute;
+        isEqual7.in[1] <== gridPointArray[7];
+        signal isEqual7Out <== isEqual7.out;
+        signal result7 <== isEqual7Out + result6;
+    
+        component isEqual8 = IsEqual();
+        isEqual8.in[0] <== verifyMinute;
+        isEqual8.in[1] <== gridPointArray[8];
+        signal isEqual8Out <== isEqual8.out;
+        signal result8 <== isEqual8Out + result7;
+    
+        component isEqual9 = IsEqual();
+        isEqual9.in[0] <== verifyMinute;
+        isEqual9.in[1] <== gridPointArray[9];
+        signal isEqual9Out <== isEqual9.out;
+        signal result9 <== isEqual9Out + result8;
+    
+        out <== result9;
+    }
     
     
-        template CoordinateInGrid(latTrue, lonTrue) {
+    template IsInputCorrect() {
+        // Inputs
+        signal input verifyLatDegree;
+        signal input verifyLatMinute;
+        signal input verifyLongDegree;
+        signal input verifyLongMinute;
     
-            // Receive input signals for verification
-            signal input latVerify;
-            signal input lonVerify;
+        // Input Requirements
+        signal latDegreeMinReq;
+        signal latDegreeMaxReq;
+        signal longDegreeMinReq;
+        signal longDegreeMaxReq;
+        signal latMinuteGridReq;
+        signal longMinuteGridReq;
     
-            signal latEqualResult;
-            signal lonEqualResult;
+        // Requirement Aggregates
+        signal latDegreeBoundsReq;
+        signal longDegreeBoundsReq;
+        signal degreeBoundsReq;
+        signal minuteGridReq;
     
-            // Check if latitude is equal
-            component isLatEqual = IsEqual();
-            isLatEqual.in[0] <== latTrue;
-            isLatEqual.in[1] <== latVerify;
-            latEqualResult <== isLatEqual.out;
+        // Outputs
+        signal output out;
     
-            // Check if longitude is equal
-            component isLonEqual = IsEqual();
-            isLonEqual.in[0] <== lonTrue;
-            isLonEqual.in[1] <== lonVerify;
-            lonEqualResult <== isLonEqual.out;
+        // Degree bounds check for latitude (-90 to 90)
+        component latDegreeMinCheck = GreaterEqThan(10);
+        latDegreeMinCheck.in[0] <== verifyLatDegree;
+        latDegreeMinCheck.in[1] <== -90;
+        latDegreeMinReq <== latDegreeMinCheck.out;
     
-            // Output 1 if both conditions are true, else 0
-            signal output isInGrid;
-            isInGrid <== latEqualResult * lonEqualResult;
-        }
+        component latDegreeMaxCheck = LessEqThan(10);
+        latDegreeMaxCheck.in[0] <== verifyLatDegree;
+        latDegreeMaxCheck.in[1] <== 90;
+        latDegreeMaxReq <== latDegreeMaxCheck.out;
     
-        component main = CoordinateInGrid(${lat}, ${lon});`
+        // Degree bounds check for longitude (-180 to 180)
+        component longDegreeMinCheck = GreaterEqThan(10);
+        longDegreeMinCheck.in[0] <== verifyLongDegree;
+        longDegreeMinCheck.in[1] <== -180;
+        longDegreeMinReq <== longDegreeMinCheck.out;
+    
+        component longDegreeMaxCheck = LessEqThan(10);
+        longDegreeMaxCheck.in[0] <== verifyLongDegree;
+        longDegreeMaxCheck.in[1] <== 180;
+        longDegreeMaxReq <== longDegreeMaxCheck.out;
+    
+        // Check that minutes are verify for 0.1-degree grid
+        component verifyLatMinuteInGrid = IsMinuteInGrid();
+        verifyLatMinuteInGrid.verifyMinute <== verifyLatMinute;
+        latMinuteGridReq <== verifyLatMinuteInGrid.out;
+    
+        component verifyLongMinuteInGrid = IsMinuteInGrid();
+        verifyLongMinuteInGrid.verifyMinute <== verifyLongMinute;
+        longMinuteGridReq <== verifyLongMinuteInGrid.out;
+    
+        // Aggregate requirements for output
+        latDegreeBoundsReq <== latDegreeMinReq * latDegreeMaxReq;
+        longDegreeBoundsReq <== longDegreeMinReq * longDegreeMaxReq;
+        degreeBoundsReq <== latDegreeBoundsReq * longDegreeBoundsReq;
+        minuteGridReq <== latMinuteGridReq * longMinuteGridReq;
+        out <== degreeBoundsReq * minuteGridReq;
+    }
+    
+    
+    template IsCoordinateInGrid() {
+        // Inputs
+        signal input imageLatDegree;
+        signal input imageLatMinute;
+        signal input imageLongDegree;
+        signal input imageLongMinute;
+        signal input verifyLatDegree;
+        signal input verifyLatMinute;
+        signal input verifyLongDegree;
+        signal input verifyLongMinute;
+    
+        // Coordinate Checks
+        signal latDegreeEqResult;
+        signal longDegreeEqResult;
+        signal latMinuteNorthResult;
+        signal latMinuteSouthResult;
+        signal longMinuteWestResult;
+        signal longMinuteEastResult;
+    
+        // Coordinate in Grid Requirements
+        signal degreeEqReq;
+        signal latMinuteReq;
+        signal longMinuteReq;
+        signal minuteInGridReq;
+    
+        // Outputs
+        signal output inGrid;
+    
+        // Degree equality check
+        component latDegreeEqCheck = IsEqual();
+        latDegreeEqCheck.in[0] <== verifyLatDegree;
+        latDegreeEqCheck.in[1] <== imageLatDegree;
+        latDegreeEqResult <== latDegreeEqCheck.out;
+    
+        component longDegreeEqCheck = IsEqual();
+        longDegreeEqCheck.in[0] <== verifyLongDegree;
+        longDegreeEqCheck.in[1] <== imageLongDegree;
+        longDegreeEqResult <== longDegreeEqCheck.out;
+    
+        // Minute checks for latitude
+        component latMinuteNorthCheck = LessEqThan(10);
+        latMinuteNorthCheck.in[0] <== imageLatMinute;
+        latMinuteNorthCheck.in[1] <== verifyLatMinute;
+        latMinuteNorthResult <== latMinuteNorthCheck.out;
+    
+        component latMinuteSouthCheck = GreaterThan(10);
+        latMinuteSouthCheck.in[0] <== imageLatMinute;
+        latMinuteSouthCheck.in[1] <== verifyLatMinute - 6;
+        latMinuteSouthResult <== latMinuteSouthCheck.out;
+    
+        // Minute checks for longitude
+        component longMinuteWestCheck = GreaterEqThan(10);
+        longMinuteWestCheck.in[0] <== verifyLongMinute;
+        longMinuteWestCheck.in[1] <== imageLongMinute;
+        longMinuteWestResult <== longMinuteWestCheck.out;
+    
+        component longMinuteEastCheck = LessThan(10);
+        longMinuteEastCheck.in[0] <== imageLongMinute;
+        longMinuteEastCheck.in[1] <== verifyLongMinute + 6;
+        longMinuteEastResult <== longMinuteEastCheck.out;
+    
+        degreeEqReq <== latDegreeEqResult * longDegreeEqResult;
+        latMinuteReq <== latMinuteNorthResult * latMinuteSouthResult;
+        longMinuteReq <== longMinuteWestResult * longMinuteEastResult;
+        minuteInGridReq <== latMinuteReq * longMinuteReq;
+    
+        inGrid <== degreeEqReq * minuteInGridReq;
+    }
+    
+    
+    template Main(imageLatDegree, imageLatMinute, imageLongDegree, imageLongMinute) {
+    
+        // Inputs
+        signal input verifyLatDegree;
+        signal input verifyLatMinute;
+        signal input verifyLongDegree;
+        signal input verifyLongMinute;
+    
+        // Outputs
+        signal output inGrid;
+    
+        // Check input requirements
+        component checkInputRequirements = IsInputCorrect();
+        checkInputRequirements.verifyLatDegree <== verifyLatDegree;
+        checkInputRequirements.verifyLatMinute <== verifyLatMinute;
+        checkInputRequirements.verifyLongDegree <== verifyLongDegree;
+        checkInputRequirements.verifyLongMinute <== verifyLongMinute;
+        signal inputRequirementsMet <== checkInputRequirements.out;
+        1 === inputRequirementsMet;
+    
+        // Check if the verify coordinates are in the grid
+        component coordinateInGrid = IsCoordinateInGrid();
+        coordinateInGrid.imageLatDegree <== imageLatDegree;
+        coordinateInGrid.imageLatMinute <== imageLatMinute;
+        coordinateInGrid.imageLongDegree <== imageLongDegree;
+        coordinateInGrid.imageLongMinute <== imageLongMinute;
+        coordinateInGrid.verifyLatDegree <== verifyLatDegree;
+        coordinateInGrid.verifyLatMinute <== verifyLatMinute;
+        coordinateInGrid.verifyLongDegree <== verifyLongDegree;
+        coordinateInGrid.verifyLongMinute <== verifyLongMinute;
+        inGrid <== coordinateInGrid.inGrid;
+    }
+    
+    component main = Main(${imageLatDeg}, ${imageLatMin}, ${imageLongDeg}, ${imageLongMin});`
 }
 
 
@@ -164,7 +374,7 @@ async function convertCallData(calldata) {
  * @returns {Promise<void>}
  * @type {(urlDegreeMapping: Object) => Promise<void>}
  */
-async function createProofs(urlDegreeMapping) {
+async function createProofs(urlCoordinatesMapping) {
 
     const circuitFolder = './circuits/';
 
@@ -173,8 +383,8 @@ async function createProofs(urlDegreeMapping) {
     }
 
     try {
-        for (const [url, degrees] of Object.entries(urlDegreeMapping)) {
-            const circuitContent = await createCircuitCode(degrees.lat, degrees.lon);
+        for (const [url, coordinates] of Object.entries(urlCoordinatesMapping)) {
+            const circuitContent = await createCircuitCode(coordinates.latDeg, coordinates.latMin, coordinates.longDeg, coordinates.longMin);
             await createCircuitFiles(url, circuitContent, circuitFolder);
         }
 
@@ -231,7 +441,7 @@ async function verifyProof(CSPlatform, verifierContracts, reviewerWallets, event
 
     for (const event of events) {
         const [contributionId, participant, reviewer, imageUrl, verifier] = event.args;
-        const degreesToVerify = { latVerify: -23, lonVerify: 18 }
+        const degreesToVerify = { verifyLatDegree: -23, verifyLatMinute: 12, verifyLongDegree: 18, verifyLongMinute: 18}
         const arweaveId = await getArweaveIdFromUrl(imageUrl);
         const verifierContract = await verifierContracts.find(async (contract) => (await contract.getAddress()).toString() === verifier);
         const { proof, publicSignals } = await snarkjs.groth16.fullProve(
@@ -254,9 +464,9 @@ module.exports = {
 
     createZKPContracts: async function(CSPlatform, participantWallets, reviewerWallets, contributionData) {
         const reviewEvents = await getContributionReviewedEvents(CSPlatform, 1);
-        const urlDegreeMapping = await updateContributionData(contributionData);
+        const urlCoordinatesMapping = await updateContributionData(contributionData);
 
-        await createProofs(urlDegreeMapping);
+        await createProofs(urlCoordinatesMapping);
         const deployProofsResult = await deployProofs(CSPlatform, participantWallets, reviewEvents);
         CSPlatform = deployProofsResult.CSPlatform;
         const verifierContracts = deployProofsResult.verifierContracts;
