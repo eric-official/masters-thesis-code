@@ -58,6 +58,7 @@ contract CSPlatform {
             false,
             true
         );
+        console.log("msg.sender", msg.sender);
     }
 
     function createContribution(string memory _imageUrl, uint _timestamp, string[] memory _animalSpecies) public {
@@ -130,7 +131,6 @@ contract CSPlatform {
         int resultInt = calculateReviewResult(contribution, _contributionId, _urlAssessment, _timestampAssessment, _coordinatesAssessment, _animalSpeciesAssessment);
         contribution.dataQuality = calculateDataQuality(resultInt, _imageAssessment);
         updateReviewUsers(contribution);
-        rewardReviewUsers(contribution.dataQuality, contribution.participant, contribution.reviewer);
 
         //console.log(contribution.participant);
         //console.logInt(int256(SD59x18.unwrap(users[contribution.participant].reputation)));
@@ -140,6 +140,7 @@ contract CSPlatform {
     function updateVerifier(address _verifier, uint _contributionId) public {
         Contribution storage contribution = assignedContributions[_contributionId];
         contribution.verifier = _verifier;
+        rewardReviewUsers(contribution.dataQuality, contribution.participant, contribution.reviewer);
         assignedContributions[_contributionId] = contribution;
         emit VerifierUpdated(_contributionId, contribution.participant, contribution.reviewer, contribution.imageUrl, _verifier);
     }

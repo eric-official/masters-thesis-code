@@ -1,6 +1,6 @@
 const {ethers} = require('hardhat')
 const {getContributionCreatedEvents, getContributionAssignedEvents, getCoordinateUpdatedEvents} = require('./events')
-const {formatCoordinatesToBytes, formatCoordinatesFromBytes, getImageURLs} = require('./utils')
+const {formatCoordinatesToBytes, getImageURLs} = require('./utils')
 const {displayWallets, displayCreatedContributions, displayAssignedContributions, displayUpdatedCoordinates, displayDecryptedCoordinates,
     displayReviewedContributions,
     displayUpdatedVerifiers, displayVerifications
@@ -9,6 +9,8 @@ const {createProofs, createZKPContracts} = require('./proofs')
 const Table = require('cli-table3')
 const colors = require('@colors/colors');
 const eccrypto = require('eccrypto');
+const cliProgress = require('cli-progress');
+
 
 
 /**
@@ -43,29 +45,21 @@ async function splitWallets(connectedWallets, participantReviewerRatio) {
 }
 
 
-async function createContributions(numContributions, CSPlatform, participantWallets, imageUrls, contributionData) {
-    for (let i = 0; i < numContributions; i++) {
-        const participantIndex = (i + participantWallets.length) % participantWallets.length
-        const participantWallet = participantWallets[participantIndex];
+async function createContributions(CSPlatform, participantWallet, imageUrl, contributionData) {
+    const animalSpecies = contributionData[imageUrl].animalSpecies;
 
-        const imageIndex = (i + imageUrls.length) % imageUrls.length;
-        const imageUrl = imageUrls[imageIndex];
-        const animalSpecies = contributionData[imageUrl].animalSpecies;
-
-        const createContributionResponse1 = await CSPlatform.connect(participantWallet).createContribution(imageUrl, Date.now(), animalSpecies);
-        await createContributionResponse1.wait();
-    }
+    const createContributionResponse1 = await CSPlatform.connect(participantWallet).createContribution(imageUrl, Date.now(), animalSpecies);
+    await createContributionResponse1.wait();
 
     return CSPlatform;
 }
 
 
-async function assignContributions(CSPlatform, reviewerWallets) {
+async function assignContributions(CSPlatform, reviewerWallet) {
     let i = 0;
     while (true) {
         try {
-            let reviewerIndex = (i + reviewerWallets.length) % reviewerWallets.length;
-            const assignContributionResponse = await CSPlatform.connect(reviewerWallets[reviewerIndex]).assignContribution();
+            const assignContributionResponse = await CSPlatform.connect(reviewerWallet).assignContribution();
             await assignContributionResponse.wait();
         } catch (error) {
             break;
@@ -77,47 +71,58 @@ async function assignContributions(CSPlatform, reviewerWallets) {
 }
 
 
-async function updateCoordinates(CSPlatform, participantWallets, reviewerWallets, contributionData) {
+async function updateCoordinates(CSPlatform, participantWallet, reviewerWallet, contributionData) {
     const events = await getContributionAssignedEvents(CSPlatform)
 
-    for (let i = 0; i < events.length; i++) {
-        const event = events[i];
-        const [id, participant, reviewer, image] = event.args;
+    // select the latest event that matches the paricipant and reviewer
+    const event = events[events.length - 1];
+    const [id, participant, reviewer, image] = event.args;
 
-        const participantIndex = participantWallets.findIndex(wallet => wallet.address === participant);
-        const reviewerIndex = reviewerWallets.findIndex(wallet => wallet.address === reviewer);
-        const reviewerPublicKey = Buffer.from(reviewerWallets[reviewerIndex].publicKey.slice(2), 'hex');
+    const reviewerPublicKey = Buffer.from(reviewerWallet.publicKey.slice(2), 'hex');
 
-        const coordinates = contributionData[image].coordinates;
-        const coordinatesBuffer = Buffer.from(coordinates);
-        const encryptedCoordinates = await eccrypto.encrypt(reviewerPublicKey, coordinatesBuffer);
-        const formattedCoordinates = await formatCoordinatesToBytes(encryptedCoordinates);
+    const coordinates = contributionData[image].coordinates;
+    const coordinatesBuffer = Buffer.from(coordinates);
+    const encryptedCoordinates = await eccrypto.encrypt(reviewerPublicKey, coordinatesBuffer);
+    const formattedCoordinates = await formatCoordinatesToBytes(encryptedCoordinates);
 
-        const updateCoordinatesResponse = await CSPlatform.connect(participantWallets[participantIndex]).updateCoordinates(id, formattedCoordinates);
-        await updateCoordinatesResponse.wait();
-    }
+    const updateCoordinatesResponse = await CSPlatform.connect(participantWallet).updateCoordinates(id, formattedCoordinates);
+    await updateCoordinatesResponse.wait();
+
 
     return CSPlatform;
 }
 
 
-async function reviewContributions(CSPlatform, reviewerWallets, provider) {
+async function reviewContributions(CSPlatform, reviewerWallet, provider) {
     const events = await getContributionAssignedEvents(CSPlatform);
 
-    for (let i = 0; i < events.length; i++) {
-        const event = events[i];
-        const [id, participant, reviewer, image] = event.args;
+    const event = events[events.length - 1];
+    const [id, participant, reviewer, image] = event.args;
 
-        console.log(reviewer)
-        console.log(await provider.getBalance(reviewer))
-        const reviewerIndex = reviewerWallets.findIndex(wallet => wallet.address === reviewer);
-        const reviewResponse = await CSPlatform.connect(reviewerWallets[reviewerIndex]).reviewContribution(id, 1, 1, 1, 1, 5);
-        await reviewResponse.wait();
-        console.log(await provider.getBalance(reviewer))
-
-    }
+    const reviewResponse = await CSPlatform.connect(reviewerWallet).reviewContribution(id, 1, 1, 1, 1, 5);
+    await reviewResponse.wait();
 
     return CSPlatform;
+}
+
+
+async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl, provider) {
+    CSPlatform = await createContributions(CSPlatform, participantWallet, imageUrl, contributionData);
+
+    CSPlatform = await assignContributions(CSPlatform, reviewerWallet);
+
+    CSPlatform = await updateCoordinates(CSPlatform, participantWallet, reviewerWallet, contributionData);
+
+    CSPlatform = await reviewContributions(CSPlatform, reviewerWallet, provider);
+
+    const createZKPContractsRes = await createZKPContracts(CSPlatform, participantWallet, reviewerWallet, contributionData);
+    CSPlatform = createZKPContractsRes.CSPlatform;
+    const verifications = createZKPContractsRes.verifications;
+
+    console.log(reviewerWallet.address)
+    console.log(await provider.getBalance(reviewerWallet.address))
+
+    return {CSPlatform: CSPlatform};
 }
 
 
@@ -125,12 +130,14 @@ async function reviewContributions(CSPlatform, reviewerWallets, provider) {
 async function main() {
 
     // Constants for simulating test cases
-    const NUM_WALLETS = 10;
-    const PARTICIPANT_REVIEWER_RATIO = 0.5;
-    const NUM_CONTRIBUTIONS = 10;
+    const SIMULATION_MODE = (process.argv[2] || "Staged")
+    const NUM_WALLETS = (process.argv[3] || 2);
+    const PARTICIPANT_REVIEWER_RATIO = (process.argv[4] || 0.5);
+    const NUM_CONTRIBUTIONS = (process.argv[5] || 1);
+    const LOG_CONTRIBUTIONS = (process.argv[6] || false);
 
     // Assumed user inputs
-    const contributionData = {
+    let contributionData = {
         "https://arweave.net/id5oYIqwOfW_NAEquZJSMRxKov7IRfYREJ03eJCtWZQ": {coordinates: "23° 11' 6.786\" S, 18° 22' 36.054\" E", animalSpecies: ["Elephant", "Lion"]},
         "https://arweave.net/Rk9Y8H1ovtcVDit5IsG2SJEZhBqL5Iy_DM9-ZQRx5nk": {coordinates: "23° 12' 48.954\" S, 18° 21' 18.996\" E", animalSpecies: ["Elephant", "Lion"]},
         "https://arweave.net/7kHJd52Gc-eGKwrNtQ5SU7JULtUEMN6Rrr_Fh5ZzKBI": {coordinates: "23° 11' 19.194\" S, 18° 22' 35.91\" E", animalSpecies: ["Elephant", "Lion"]},
@@ -146,19 +153,6 @@ async function main() {
     const [signer] = await ethers.getSigners();
     const provider = ethers.provider;
 
-    console.log("Get image URLs...");
-    const imageUrls = await getImageURLs();
-    console.log("Image URLs retrieved!");
-
-    console.log("Deploying CSPlatform...");
-    const CSPlatformFactory = await ethers.getContractFactory("CSPlatform");
-    let CSPlatform = await CSPlatformFactory.deploy({
-        value: ethers.parseEther("100") // 1 Ether, adjust the amount as needed
-    });
-    await CSPlatform.waitForDeployment();
-    console.log("CSPlatform deployed to:", await CSPlatform.getAddress());
-    console.log(" ");
-
     console.log("Create wallets...");
     const connectedWallets = await createWallets(NUM_WALLETS, signer, provider);
     const [participantWallets, reviewerWallets] = await splitWallets(connectedWallets, PARTICIPANT_REVIEWER_RATIO);
@@ -166,39 +160,42 @@ async function main() {
     console.log("Wallets created!");
     console.log(" ");
 
-    console.log("Create contributions...");
-    CSPlatform = await createContributions(NUM_CONTRIBUTIONS, CSPlatform, participantWallets, imageUrls, contributionData);
-    await displayCreatedContributions(CSPlatform);
-    console.log("Contributions created!");
+    console.log("Deploying CSPlatform...");
+    const CSPlatformFactory = await ethers.getContractFactory("CSPlatform", reviewerWallets[0]);
+    let CSPlatform = await CSPlatformFactory.deploy({
+        value: ethers.parseEther("1") // 1 Ether, adjust the amount as needed
+    });
+    await CSPlatform.waitForDeployment();
+    console.log("CSPlatform deployed to:", await CSPlatform.getAddress());
     console.log(" ");
 
-    console.log("Assign contributions...")
-    CSPlatform = await assignContributions(CSPlatform, reviewerWallets);
-    await displayAssignedContributions(CSPlatform);
-    console.log("Contribution assigned!");
+    console.log("Get image URLs...");
+    const imageUrls = await getImageURLs();
+    console.log("Image URLs retrieved!");
 
-    console.log("Update coordinates...");
-    CSPlatform = await updateCoordinates(CSPlatform, participantWallets, reviewerWallets, contributionData);
-    await displayUpdatedCoordinates(CSPlatform);
-    console.log("Coordinates updated!");
+    const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+    progressBar.start(NUM_CONTRIBUTIONS, 0);
 
-    console.log("Decrypt coordinates...");
-    await displayDecryptedCoordinates(CSPlatform, participantWallets, reviewerWallets);
-    console.log("Coordinates decrypted!");
+    for (let i = 0; i < NUM_CONTRIBUTIONS; i++) {
+        const participantIndex = (i + participantWallets.length) % participantWallets.length
+        const participantWallet = participantWallets[participantIndex];
 
-    console.log("Review contributions...");
-    CSPlatform = await reviewContributions(CSPlatform, reviewerWallets, provider);
-    await displayReviewedContributions(CSPlatform);
-    console.log("Contributions reviewed!");
+        const reviewerIndex = (i + reviewerWallets.length) % reviewerWallets.length;
+        const reviewerWallet = reviewerWallets[reviewerIndex];
 
-    console.log("Create ZKP Contracts...");
-    const createZKPContractsRes = await createZKPContracts(CSPlatform, participantWallets, reviewerWallets, contributionData);
-    CSPlatform = createZKPContractsRes.CSPlatform;
-    const verifications = createZKPContractsRes.verifications;
+        const imageIndex = (i + imageUrls.length) % imageUrls.length;
+        const imageUrl = imageUrls[imageIndex];
 
-    await displayUpdatedVerifiers(CSPlatform);
-    await displayVerifications(verifications);
-    console.log("ZKP Contracts verified!");
+        const contributionDataElement = {}
+        contributionDataElement[imageUrl] = contributionData[imageUrl]
+
+        const processResults = await runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWallet, contributionDataElement, imageUrl, provider);
+        CSPlatform = processResults.CSPlatform;
+
+        progressBar.update(i + 1);
+    }
+
+    progressBar.stop();
 }
 
 main()

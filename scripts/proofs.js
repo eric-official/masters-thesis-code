@@ -327,17 +327,16 @@ async function deployVerifierContract(verifierPath) {
  * @param verifierPath - directory path of the verifier contract
  * @param verifierAddress - address of the verifier contract
  * @param events - list of ContributionReviewed events
- * @param participantWallets - wallets of participants
+ * @param participantWallet - wallet of participant
  * @returns {Promise<CSPlatform>}
  * @type {(CSPlatform: CSPlatform, verifierPath: string, verifierAddress: string, events: Array, participantWallets: Array) => Promise<CSPlatform>}
  */
-async function addVerifierToCSPlatform(CSPlatform, verifierPath, verifierAddress, events, participantWallets) {
+async function addVerifierToCSPlatform(CSPlatform, verifierPath, verifierAddress, events, participantWallet) {
     const cleanedVerifierPath = verifierPath.replace("contracts/coordinate-verifier-", "").replace(".sol:Groth16Verifier", "");
     const imageUrl = `https://arweave.net/${cleanedVerifierPath}`;
     const contribution = events.find(event => event.args.imageUrl === imageUrl);
 
-    const participantIndex = participantWallets.findIndex(wallet => wallet.address === contribution.args.participant);
-    const updateVerifierResponse1 = await CSPlatform.connect(participantWallets[participantIndex]).updateVerifier(verifierAddress, contribution.args.contributionId);
+    const updateVerifierResponse1 = await CSPlatform.connect(participantWallet).updateVerifier(verifierAddress, contribution.args.contributionId);
     await updateVerifierResponse1.wait();
 
     return CSPlatform;
@@ -401,12 +400,12 @@ async function createProofs(urlCoordinatesMapping) {
 /**
  * Deploy verifier contracts and add them to CSPlatform contract
  * @param CSPlatform - CSPlatform contract
- * @param participantWallets - wallets of participants
+ * @param participantWallet - wallet of participant
  * @param events - list of ContributionReviewed events
  * @returns {Promise<{CSPlatform, verifierContracts: *[]}>}
  * @type {(CSPlatform: CSPlatform, participantWallets: Array, events: Array) => Promise<{CSPlatform: CSPlatform, verifierContracts: Array}>}
  */
-async function deployProofs(CSPlatform, participantWallets, events) {
+async function deployProofs(CSPlatform, participantWallet, events) {
     const contractFolder = 'contracts/';
     const files = fs.readdirSync(contractFolder);
     const verifierFiles = files.filter(file => file.startsWith('coordinate-verifier'));
@@ -418,7 +417,7 @@ async function deployProofs(CSPlatform, participantWallets, events) {
         const verifierContract = await deployVerifierContract(verifierPath);
         const verifierAddress = await verifierContract.getAddress()
         verifierContracts.push(verifierContract);
-        CSPlatform = await addVerifierToCSPlatform(CSPlatform, verifierPath, verifierAddress, events, participantWallets);
+        CSPlatform = await addVerifierToCSPlatform(CSPlatform, verifierPath, verifierAddress, events, participantWallet);
     }
 
     return {CSPlatform: CSPlatform, verifierContracts: verifierContracts};
@@ -429,13 +428,13 @@ async function deployProofs(CSPlatform, participantWallets, events) {
  * verify previously created proofs
  * @param CSPlatform - CSPlatform contract
  * @param verifierContracts - list of verifier contracts
- * @param reviewerWallets - wallets of reviewers
+ * @param reviewerWallet - wallet of reviewer
  * @param events - list of VerifierUpdated events
  * @param urlDegreeMapping - mapping of image URLs to degrees
  * @returns {Promise<Array.<string, string, string, number, bool>>}
  * @type {(CSPlatform: CSPlatform, verifierContracts: Array, reviewerWallets: Array, events: Array, urlDegreeMapping: Object) => Promise<Array.<string, string, string, number, bool>>}
  */
-async function verifyProof(CSPlatform, verifierContracts, reviewerWallets, events, urlDegreeMapping) {
+async function verifyProof(CSPlatform, verifierContracts, reviewerWallet, events, urlDegreeMapping) {
     const circuitsFolder = './circuits/';
     const verifications = [];
 
@@ -450,7 +449,7 @@ async function verifyProof(CSPlatform, verifierContracts, reviewerWallets, event
             `${circuitsFolder}coordinate-circuit-${arweaveId}.zkey`);
         const solidityCallData = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
         const convertedCallData = await convertCallData(solidityCallData);
-        const verifyResponse = await verifierContract.connect(reviewerWallets[0]).verifyProof(convertedCallData.a, convertedCallData.b, convertedCallData.c, convertedCallData.input);
+        const verifyResponse = await verifierContract.connect(reviewerWallet).verifyProof(convertedCallData.a, convertedCallData.b, convertedCallData.c, convertedCallData.input);
 
         const degreeString = `${degreesToVerify.latVerify}, ${degreesToVerify.lonVerify}`;
         verifications.push([imageUrl, verifier, degreeString, publicSignals[0], verifyResponse]);
@@ -462,17 +461,17 @@ async function verifyProof(CSPlatform, verifierContracts, reviewerWallets, event
 
 module.exports = {
 
-    createZKPContracts: async function(CSPlatform, participantWallets, reviewerWallets, contributionData) {
+    createZKPContracts: async function(CSPlatform, participantWallet, reviewerWallet, contributionData) {
         const reviewEvents = await getContributionReviewedEvents(CSPlatform, 1);
         const urlCoordinatesMapping = await updateContributionData(contributionData);
 
         await createProofs(urlCoordinatesMapping);
-        const deployProofsResult = await deployProofs(CSPlatform, participantWallets, reviewEvents);
+        const deployProofsResult = await deployProofs(CSPlatform, participantWallet, reviewEvents);
         CSPlatform = deployProofsResult.CSPlatform;
         const verifierContracts = deployProofsResult.verifierContracts;
 
         const verifierEvents = await getVerifierUpdatedEvents(CSPlatform);
-        const verifications = await verifyProof(CSPlatform, verifierContracts, reviewerWallets, verifierEvents);
+        const verifications = await verifyProof(CSPlatform, verifierContracts, reviewerWallet, verifierEvents, urlCoordinatesMapping);
 
 
         return {CSPlatform: CSPlatform, verifications: verifications};
