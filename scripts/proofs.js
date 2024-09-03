@@ -3,7 +3,7 @@ const fs = require('fs');
 const snarkjs = require('snarkjs')
 const {ethers} = require('hardhat')
 const { getContributionReviewedEvents, getVerifierUpdatedEvents } = require('./events');
-const { updateContributionData, getArweaveIdFromUrl} = require('./utils');
+const { updateContributionData, getArweaveIdFromUrl, deleteVerifierContracts} = require('./utils');
 
 
 /**
@@ -334,7 +334,7 @@ async function deployVerifierContract(verifierPath) {
 async function addVerifierToCSPlatform(CSPlatform, verifierPath, verifierAddress, events, participantWallet) {
     const cleanedVerifierPath = verifierPath.replace("contracts/coordinate-verifier-", "").replace(".sol:Groth16Verifier", "");
     const imageUrl = `https://arweave.net/${cleanedVerifierPath}`;
-    const contribution = events.find(event => event.args.imageUrl === imageUrl);
+    const contribution = events.find(event => ethers.toUtf8String(event.args.imageUrl) === imageUrl);
 
     const updateVerifierResponse1 = await CSPlatform.connect(participantWallet).updateVerifier(verifierAddress, contribution.args.contributionId);
     await updateVerifierResponse1.wait();
@@ -380,6 +380,9 @@ async function createProofs(urlCoordinatesMapping) {
     if (!fs.existsSync(`${circuitFolder}`)) {
         fs.mkdirSync(`${circuitFolder}`);
     }
+
+    await deleteVerifierContracts();
+
 
     try {
         for (const [url, coordinates] of Object.entries(urlCoordinatesMapping)) {
@@ -439,8 +442,9 @@ async function verifyProof(CSPlatform, verifierContracts, reviewerWallet, events
     const verifications = [];
 
     for (const event of events) {
-        const [contributionId, participant, reviewer, imageUrl, verifier] = event.args;
+        const [contributionId, participant, reviewer, imageUrlUtf8, verifier] = event.args;
         const degreesToVerify = { verifyLatDegree: -23, verifyLatMinute: 12, verifyLongDegree: 18, verifyLongMinute: 18}
+        const imageUrl = ethers.toUtf8String(imageUrlUtf8);
         const arweaveId = await getArweaveIdFromUrl(imageUrl);
         const verifierContract = await verifierContracts.find(async (contract) => (await contract.getAddress()).toString() === verifier);
         const { proof, publicSignals } = await snarkjs.groth16.fullProve(

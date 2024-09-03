@@ -10,7 +10,8 @@ const Table = require('cli-table3')
 const colors = require('@colors/colors');
 const eccrypto = require('eccrypto');
 const cliProgress = require('cli-progress');
-
+const fs = require('fs');
+const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
 
 /**
@@ -48,7 +49,11 @@ async function splitWallets(connectedWallets, participantReviewerRatio) {
 async function createContributions(CSPlatform, participantWallet, imageUrl, contributionData) {
     const animalSpecies = contributionData[imageUrl].animalSpecies;
 
-    const createContributionResponse1 = await CSPlatform.connect(participantWallet).createContribution(imageUrl, Date.now(), animalSpecies);
+    const imageUrlBytes = ethers.toUtf8Bytes(imageUrl);
+    const animalSpeciesBytes32 = animalSpecies.map(animal => ethers.encodeBytes32String(animal));
+
+
+    const createContributionResponse1 = await CSPlatform.connect(participantWallet).createContribution(imageUrlBytes, Date.now(), animalSpeciesBytes32);
     await createContributionResponse1.wait();
 
     return CSPlatform;
@@ -80,7 +85,7 @@ async function updateCoordinates(CSPlatform, participantWallet, reviewerWallet, 
 
     const reviewerPublicKey = Buffer.from(reviewerWallet.publicKey.slice(2), 'hex');
 
-    const coordinates = contributionData[image].coordinates;
+    const coordinates = contributionData[ethers.toUtf8String(image)].coordinates;
     const coordinatesBuffer = Buffer.from(coordinates);
     const encryptedCoordinates = await eccrypto.encrypt(reviewerPublicKey, coordinatesBuffer);
     const formattedCoordinates = await formatCoordinatesToBytes(encryptedCoordinates);
@@ -106,23 +111,57 @@ async function reviewContributions(CSPlatform, reviewerWallet, provider) {
 }
 
 
-async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl, provider) {
+async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl, provider, i) {
+    const participantInitialBalance = await provider.getBalance(participantWallet.address);
+    const reviewerInitialBalance = await provider.getBalance(reviewerWallet.address);
+
     CSPlatform = await createContributions(CSPlatform, participantWallet, imageUrl, contributionData);
+    const participantCreateBalance = await provider.getBalance(participantWallet.address);
+    const reviewerCreateBalance = await provider.getBalance(reviewerWallet.address);
 
     CSPlatform = await assignContributions(CSPlatform, reviewerWallet);
+    const participantAssignBalance = await provider.getBalance(participantWallet.address);
+    const reviewerAssignBalance = await provider.getBalance(reviewerWallet.address);
 
     CSPlatform = await updateCoordinates(CSPlatform, participantWallet, reviewerWallet, contributionData);
+    const participantUpdateBalance = await provider.getBalance(participantWallet.address);
+    const reviewerUpdateBalance = await provider.getBalance(reviewerWallet.address);
 
     CSPlatform = await reviewContributions(CSPlatform, reviewerWallet, provider);
+    const participantReviewBalance = await provider.getBalance(participantWallet.address);
+    const reviewerReviewBalance = await provider.getBalance(reviewerWallet.address);
 
     const createZKPContractsRes = await createZKPContracts(CSPlatform, participantWallet, reviewerWallet, contributionData);
     CSPlatform = createZKPContractsRes.CSPlatform;
     const verifications = createZKPContractsRes.verifications;
+    const participantFinalBalance = await provider.getBalance(participantWallet.address);
+    const reviewerFinalBalance = await provider.getBalance(reviewerWallet.address);
 
-    console.log(reviewerWallet.address)
-    console.log(await provider.getBalance(reviewerWallet.address))
+    const participantBalances = {
+        step: i + 1,
+        address: participantWallet.address,
+        user: "Participant",
+        initial: participantInitialBalance,
+        create: participantCreateBalance,
+        assign: participantAssignBalance,
+        update: participantUpdateBalance,
+        review: participantReviewBalance,
+        final: participantFinalBalance
+    }
 
-    return {CSPlatform: CSPlatform};
+    const reviewerBalances = {
+        step: i + 1,
+        address: reviewerWallet.address,
+        user: "Reviewer",
+        initial: reviewerInitialBalance,
+        create: reviewerCreateBalance,
+        assign: reviewerAssignBalance,
+        update: reviewerUpdateBalance,
+        review: reviewerReviewBalance,
+        final: reviewerFinalBalance
+    }
+
+    return {CSPlatform: CSPlatform, participantBalances: participantBalances, reviewerBalances: reviewerBalances};
 }
 
 
@@ -163,11 +202,16 @@ async function main() {
     console.log("Deploying CSPlatform...");
     const CSPlatformFactory = await ethers.getContractFactory("CSPlatform", reviewerWallets[0]);
     let CSPlatform = await CSPlatformFactory.deploy({
-        value: ethers.parseEther("1") // 1 Ether, adjust the amount as needed
+        value: ethers.parseEther("5") // 1 Ether, adjust the amount as needed
     });
     await CSPlatform.waitForDeployment();
     console.log("CSPlatform deployed to:", await CSPlatform.getAddress());
     console.log(" ");
+
+    // fill ether difference of reviewerWallets[0] up to 10 ether
+    const reviewerWallet0Balance = await provider.getBalance(reviewerWallets[0].address);
+    const tx = await signer.sendTransaction({to: reviewerWallets[0].address, value: ethers.parseEther("10") - reviewerWallet0Balance});
+    await tx.wait();
 
     console.log("Get image URLs...");
     const imageUrls = await getImageURLs();
@@ -175,6 +219,7 @@ async function main() {
 
     const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
     progressBar.start(NUM_CONTRIBUTIONS, 0);
+    const balanceRecords = [];
 
     for (let i = 0; i < NUM_CONTRIBUTIONS; i++) {
         const participantIndex = (i + participantWallets.length) % participantWallets.length
@@ -189,11 +234,30 @@ async function main() {
         const contributionDataElement = {}
         contributionDataElement[imageUrl] = contributionData[imageUrl]
 
-        const processResults = await runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWallet, contributionDataElement, imageUrl, provider);
+        const processResults = await runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWallet, contributionDataElement, imageUrl, provider, i);
         CSPlatform = processResults.CSPlatform;
+        balanceRecords.push(processResults.participantBalances);
+        balanceRecords.push(processResults.reviewerBalances);
 
         progressBar.update(i + 1);
     }
+
+    const csvWriter = createCsvWriter({
+        path: 'data/balances.csv' + Date.now(),
+        header: [
+            {id: 'step', title: 'Step'},
+            {id: 'address', title: 'Address'},
+            {id: 'user', title: 'User'},
+            {id: 'initial', title: 'Initial Balance'},
+            {id: 'create', title: 'Create Contribution'},
+            {id: 'assign', title: 'Assign Contribution'},
+            {id: 'update', title: 'Update Coordinates'},
+            {id: 'review', title: 'Review Contribution'},
+            {id: 'final', title: 'Final Balance'}
+        ]
+    });
+
+    await csvWriter.writeRecords(balanceRecords)
 
     progressBar.stop();
 }

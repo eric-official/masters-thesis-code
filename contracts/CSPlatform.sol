@@ -15,10 +15,10 @@ contract CSPlatform {
     struct Contribution {
         address participant;
         address reviewer;
-        string imageUrl;
+        bytes imageUrl;
         uint timestamp;
         bytes coordinates;
-        string[] animalSpecies;
+        bytes32[] animalSpecies;
         ContributionStatus status;
         ContributionResult result;
         SD59x18 dataQuality;
@@ -43,11 +43,11 @@ contract CSPlatform {
     SD59x18 public reviewReputation = sd(0.70e18);
     SD59x18 public banReputation = sd(-0.70e18);
 
-    event ContributionCreated(address indexed participant, string imageUrl);
-    event ContributionAssigned(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl);
-    event CoordinateUpdated(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl, bytes coordinates);
-    event ContributionReviewed(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl, int result);
-    event VerifierUpdated(uint indexed contributionId, address indexed participant, address indexed reviewer, string imageUrl, address verifier);
+    event ContributionCreated(address indexed participant, bytes imageUrl);
+    event ContributionAssigned(uint indexed contributionId, address indexed participant, address indexed reviewer, bytes imageUrl);
+    event CoordinateUpdated(uint indexed contributionId, address indexed participant, address indexed reviewer, bytes imageUrl, bytes coordinates);
+    event ContributionReviewed(uint indexed contributionId, address indexed participant, address indexed reviewer, bytes imageUrl, int result);
+    event VerifierUpdated(uint indexed contributionId, address indexed participant, address indexed reviewer, bytes imageUrl, address verifier);
 
     constructor() payable {
         users[msg.sender] = User(
@@ -58,10 +58,9 @@ contract CSPlatform {
             false,
             true
         );
-        console.log("msg.sender", msg.sender);
     }
 
-    function createContribution(string memory _imageUrl, uint _timestamp, string[] memory _animalSpecies) public {
+    function createContribution(bytes memory _imageUrl, uint _timestamp, bytes32[] memory _animalSpecies) public {
         Contribution memory contribution = Contribution(
             msg.sender,
             address(0),

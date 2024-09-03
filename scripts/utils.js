@@ -1,6 +1,7 @@
 const Table = require('cli-table3')
 const colors = require('@colors/colors');
 const {Akord, Auth} = require('@akord/akord-js');
+const fs = require("fs");
 require('dotenv').config();
 
 
@@ -168,5 +169,14 @@ module.exports = {
     getArweaveIdFromUrl: async function(url) {
         const parts = url.split('/');
         return parts[parts.length - 1];
+    },
+
+
+    deleteVerifierContracts: async function() {
+        const files = fs.readdirSync('contracts/');
+        const verifierFiles = files.filter(file => file.startsWith('coordinate-verifier'));
+        for (const file of verifierFiles) {
+            fs.unlinkSync(`contracts/${file}`);
+        }
     }
 }

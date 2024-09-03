@@ -25,8 +25,6 @@ module.exports = {
             let walletAddress = participantWallets[i].address;
             let walletPrivateKey = participantWallets[i].privateKey;
             let walletBalance = await provider.getBalance(participantWallets[i].address);
-            console.log(walletAddress)
-            console.log(await provider.getBalance(walletAddress))
             table.push([walletName, "Participant", walletAddress, walletPrivateKey, ethers.formatEther(walletBalance)]);
         }
 
