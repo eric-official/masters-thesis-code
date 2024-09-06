@@ -179,8 +179,9 @@ contract CSPlatform {
     function rewardReviewUsers(SD59x18 _dataQuality, address _participant, address _reviewer) private {
         SD59x18 participantReward = calculateParticipantReward(_dataQuality, users[_participant].reputation);
         SD59x18 reviewerReward = calculateReviewerReward(users[_reviewer].reputation);
-
-        sendViaCall(payable(_participant), int256(unwrap(participantReward)));
+        if (_dataQuality > sd(0.00e18)) {
+            sendViaCall(payable(_participant), int256(unwrap(participantReward)));
+        }
         sendViaCall(payable(_reviewer), int256(unwrap(reviewerReward)));
     }
 
@@ -227,7 +228,7 @@ contract CSPlatform {
     }
 
     function calculateReviewerReward(SD59x18 _reputation) private pure returns (SD59x18) {
-        SD59x18 reward = sd(0.0002e18) * (sd(1e18) + sd(1e17) * _reputation);
+        SD59x18 reward = sd(0.0006e18) * (sd(1e18) + sd(1e17) * _reputation);
         return reward;
     }
 

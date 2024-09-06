@@ -1,6 +1,6 @@
 const {ethers} = require('hardhat')
 const {getContributionCreatedEvents, getContributionAssignedEvents, getCoordinateUpdatedEvents} = require('./events')
-const {formatCoordinatesToBytes, getImageURLs} = require('./utils')
+const {formatCoordinatesToBytes, getImageURLs, deleteVerifierContracts} = require('./utils')
 const {displayWallets, displayCreatedContributions, displayAssignedContributions, displayUpdatedCoordinates, displayDecryptedCoordinates,
     displayReviewedContributions,
     displayUpdatedVerifiers, displayVerifications
@@ -104,7 +104,7 @@ async function reviewContributions(CSPlatform, reviewerWallet, provider) {
     const event = events[events.length - 1];
     const [id, participant, reviewer, image] = event.args;
 
-    const reviewResponse = await CSPlatform.connect(reviewerWallet).reviewContribution(id, 1, 1, 1, 1, 5);
+    const reviewResponse = await CSPlatform.connect(reviewerWallet).reviewContribution(id, 1, 1, 0, 1, 1);
     await reviewResponse.wait();
 
     return CSPlatform;
@@ -131,7 +131,7 @@ async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWa
     const participantReviewBalance = await provider.getBalance(participantWallet.address);
     const reviewerReviewBalance = await provider.getBalance(reviewerWallet.address);
 
-    const createZKPContractsRes = await createZKPContracts(CSPlatform, participantWallet, reviewerWallet, contributionData);
+    const createZKPContractsRes = await createZKPContracts(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl);
     CSPlatform = createZKPContractsRes.CSPlatform;
     const verifications = createZKPContractsRes.verifications;
     const participantFinalBalance = await provider.getBalance(participantWallet.address);
@@ -199,10 +199,13 @@ async function main() {
     console.log("Wallets created!");
     console.log(" ");
 
+    const tx2 = await signer.sendTransaction({to: reviewerWallets[0].address, value: ethers.parseEther("10")});
+    await tx2.wait();
+
     console.log("Deploying CSPlatform...");
     const CSPlatformFactory = await ethers.getContractFactory("CSPlatform", reviewerWallets[0]);
     let CSPlatform = await CSPlatformFactory.deploy({
-        value: ethers.parseEther("5") // 1 Ether, adjust the amount as needed
+        value: ethers.parseEther("10") // 1 Ether, adjust the amount as needed
     });
     await CSPlatform.waitForDeployment();
     console.log("CSPlatform deployed to:", await CSPlatform.getAddress());
@@ -215,6 +218,7 @@ async function main() {
 
     console.log("Get image URLs...");
     const imageUrls = await getImageURLs();
+    await deleteVerifierContracts();
     console.log("Image URLs retrieved!");
 
     const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
@@ -234,8 +238,18 @@ async function main() {
         const contributionDataElement = {}
         contributionDataElement[imageUrl] = contributionData[imageUrl]
 
+        const contractInitialBalance = await provider.getBalance(await CSPlatform.getAddress());
         const processResults = await runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWallet, contributionDataElement, imageUrl, provider, i);
         CSPlatform = processResults.CSPlatform;
+        const participantBalances = processResults.participantBalances;
+        const reviewerBalances = processResults.reviewerBalances;
+        const contractFinalBalance = await provider.getBalance(await CSPlatform.getAddress());
+
+        participantBalances.contractInitial = contractInitialBalance;
+        participantBalances.contractFinal = contractFinalBalance;
+        reviewerBalances.contractInitial = contractInitialBalance;
+        reviewerBalances.contractFinal = contractFinalBalance;
+
         balanceRecords.push(processResults.participantBalances);
         balanceRecords.push(processResults.reviewerBalances);
 
@@ -243,7 +257,7 @@ async function main() {
     }
 
     const csvWriter = createCsvWriter({
-        path: 'data/balances.csv' + Date.now(),
+        path: 'data/balances' + Date.now() + '.csv',
         header: [
             {id: 'step', title: 'Step'},
             {id: 'address', title: 'Address'},
@@ -253,7 +267,9 @@ async function main() {
             {id: 'assign', title: 'Assign Contribution'},
             {id: 'update', title: 'Update Coordinates'},
             {id: 'review', title: 'Review Contribution'},
-            {id: 'final', title: 'Final Balance'}
+            {id: 'final', title: 'Final Balance'},
+            {id: 'contractInitial', title: 'Contract Initial Balance'},
+            {id: 'contractFinal', title: 'Contract Final Balance'}
         ]
     });
 

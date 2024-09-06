@@ -273,7 +273,7 @@ async function createCircuitFiles(url, circuitContent, circuitFolder) {
     const arweaveId = await getArweaveIdFromUrl(url);
     await fs.writeFileSync(`coordinate-circuit-${arweaveId}.circom`, circuitContent);
     await execSync(`circom coordinate-circuit-${arweaveId}.circom --r1cs --wasm --sym -o ./circuits`);
-    await execSync(`snarkjs groth16 setup ${circuitFolder}coordinate-circuit-${arweaveId}.r1cs data/pot14_final.ptau ${circuitFolder}coordinate-circuit-${arweaveId}.zkey -o`);
+    await execSync(`snarkjs groth16 setup ${circuitFolder}coordinate-circuit-${arweaveId}.r1cs data/pot8_final.ptau ${circuitFolder}coordinate-circuit-${arweaveId}.zkey -o`);
     await execSync(`snarkjs zkey export solidityverifier ${circuitFolder}coordinate-circuit-${arweaveId}.zkey ${circuitFolder}coordinate-verifier-${arweaveId}.sol`);
 }
 
@@ -381,9 +381,6 @@ async function createProofs(urlCoordinatesMapping) {
         fs.mkdirSync(`${circuitFolder}`);
     }
 
-    await deleteVerifierContracts();
-
-
     try {
         for (const [url, coordinates] of Object.entries(urlCoordinatesMapping)) {
             const circuitContent = await createCircuitCode(coordinates.latDeg, coordinates.latMin, coordinates.longDeg, coordinates.longMin);
@@ -408,12 +405,15 @@ async function createProofs(urlCoordinatesMapping) {
  * @returns {Promise<{CSPlatform, verifierContracts: *[]}>}
  * @type {(CSPlatform: CSPlatform, participantWallets: Array, events: Array) => Promise<{CSPlatform: CSPlatform, verifierContracts: Array}>}
  */
-async function deployProofs(CSPlatform, participantWallet, events) {
+async function deployProofs(CSPlatform, participantWallet, events, imageUrl) {
     const contractFolder = 'contracts/';
     const files = fs.readdirSync(contractFolder);
     const verifierFiles = files.filter(file => file.startsWith('coordinate-verifier'));
 
-    const verifierPaths = verifierFiles.map(file => `${contractFolder}${file}:Groth16Verifier`);
+    const imageId = imageUrl.replace("https://arweave.net/", "");
+    const verifierFile = verifierFiles.filter(file => file.includes(imageId));
+
+    const verifierPaths = verifierFile.map(file => `${contractFolder}${file}:Groth16Verifier`);
     const verifierContracts = [];
 
     for (const verifierPath of verifierPaths) {
@@ -465,12 +465,12 @@ async function verifyProof(CSPlatform, verifierContracts, reviewerWallet, events
 
 module.exports = {
 
-    createZKPContracts: async function(CSPlatform, participantWallet, reviewerWallet, contributionData) {
+    createZKPContracts: async function(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl) {
         const reviewEvents = await getContributionReviewedEvents(CSPlatform, 1);
         const urlCoordinatesMapping = await updateContributionData(contributionData);
 
         await createProofs(urlCoordinatesMapping);
-        const deployProofsResult = await deployProofs(CSPlatform, participantWallet, reviewEvents);
+        const deployProofsResult = await deployProofs(CSPlatform, participantWallet, reviewEvents, imageUrl);
         CSPlatform = deployProofsResult.CSPlatform;
         const verifierContracts = deployProofsResult.verifierContracts;
 
