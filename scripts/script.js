@@ -114,28 +114,34 @@ async function reviewContributions(CSPlatform, reviewerWallet, provider) {
 async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl, provider, i) {
     const participantInitialBalance = await provider.getBalance(participantWallet.address);
     const reviewerInitialBalance = await provider.getBalance(reviewerWallet.address);
+    const initialTime = Date.now();
 
     CSPlatform = await createContributions(CSPlatform, participantWallet, imageUrl, contributionData);
     const participantCreateBalance = await provider.getBalance(participantWallet.address);
     const reviewerCreateBalance = await provider.getBalance(reviewerWallet.address);
+    const createTime = Date.now();
 
     CSPlatform = await assignContributions(CSPlatform, reviewerWallet);
     const participantAssignBalance = await provider.getBalance(participantWallet.address);
     const reviewerAssignBalance = await provider.getBalance(reviewerWallet.address);
+    const assignTime = Date.now();
 
     CSPlatform = await updateCoordinates(CSPlatform, participantWallet, reviewerWallet, contributionData);
     const participantUpdateBalance = await provider.getBalance(participantWallet.address);
     const reviewerUpdateBalance = await provider.getBalance(reviewerWallet.address);
+    const updateTime = Date.now();
 
     CSPlatform = await reviewContributions(CSPlatform, reviewerWallet, provider);
     const participantReviewBalance = await provider.getBalance(participantWallet.address);
     const reviewerReviewBalance = await provider.getBalance(reviewerWallet.address);
+    const reviewTime = Date.now();
 
     const createZKPContractsRes = await createZKPContracts(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl);
     CSPlatform = createZKPContractsRes.CSPlatform;
     const verifications = createZKPContractsRes.verifications;
     const participantFinalBalance = await provider.getBalance(participantWallet.address);
     const reviewerFinalBalance = await provider.getBalance(reviewerWallet.address);
+    const finalTime = Date.now();
 
     const participantBalances = {
         step: i + 1,
@@ -161,7 +167,17 @@ async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWa
         final: reviewerFinalBalance
     }
 
-    return {CSPlatform: CSPlatform, participantBalances: participantBalances, reviewerBalances: reviewerBalances};
+    const timeRecord = {
+        step: i + 1,
+        initial: initialTime,
+        create: createTime,
+        assign: assignTime,
+        update: updateTime,
+        review: reviewTime,
+        final: finalTime
+    }
+
+    return {CSPlatform: CSPlatform, participantBalances: participantBalances, reviewerBalances: reviewerBalances, timeRecord: timeRecord};
 }
 
 
@@ -217,13 +233,16 @@ async function main() {
     await tx.wait();
 
     console.log("Get image URLs...");
-    const imageUrls = await getImageURLs();
+    const imageUrls = (await getImageURLs()).slice(0, 10);
     await deleteVerifierContracts();
     console.log("Image URLs retrieved!");
 
     const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
     progressBar.start(NUM_CONTRIBUTIONS, 0);
     const balanceRecords = [];
+    const timeRecords = [];
+
+    const tempTime = Date.now();
 
     for (let i = 0; i < NUM_CONTRIBUTIONS; i++) {
         const participantIndex = (i + participantWallets.length) % participantWallets.length
@@ -252,11 +271,14 @@ async function main() {
 
         balanceRecords.push(processResults.participantBalances);
         balanceRecords.push(processResults.reviewerBalances);
+        timeRecords.push(processResults.timeRecord);
 
         progressBar.update(i + 1);
     }
 
-    const csvWriter = createCsvWriter({
+    console.log(Date.now() - tempTime);
+
+    const balanceWriter = createCsvWriter({
         path: 'data/balances' + Date.now() + '.csv',
         header: [
             {id: 'step', title: 'Step'},
@@ -273,7 +295,22 @@ async function main() {
         ]
     });
 
-    await csvWriter.writeRecords(balanceRecords)
+    await balanceWriter.writeRecords(balanceRecords)
+
+    const timeWriter = createCsvWriter({
+        path: 'data/times' + Date.now() + '.csv',
+        header: [
+            {id: 'step', title: 'Step'},
+            {id: 'initial', title: 'Initial Time'},
+            {id: 'create', title: 'Create Contribution'},
+            {id: 'assign', title: 'Assign Contribution'},
+            {id: 'update', title: 'Update Coordinates'},
+            {id: 'review', title: 'Review Contribution'},
+            {id: 'final', title: 'Final Time'},
+        ]
+    });
+
+    await timeWriter.writeRecords(timeRecords)
 
     progressBar.stop();
 }

@@ -437,27 +437,26 @@ async function deployProofs(CSPlatform, participantWallet, events, imageUrl) {
  * @returns {Promise<Array.<string, string, string, number, bool>>}
  * @type {(CSPlatform: CSPlatform, verifierContracts: Array, reviewerWallets: Array, events: Array, urlDegreeMapping: Object) => Promise<Array.<string, string, string, number, bool>>}
  */
-async function verifyProof(CSPlatform, verifierContracts, reviewerWallet, events, urlDegreeMapping) {
+async function verifyProof(CSPlatform, verifierContracts, reviewerWallet, event, urlDegreeMapping) {
     const circuitsFolder = './circuits/';
     const verifications = [];
 
-    for (const event of events) {
-        const [contributionId, participant, reviewer, imageUrlUtf8, verifier] = event.args;
-        const degreesToVerify = { verifyLatDegree: -23, verifyLatMinute: 12, verifyLongDegree: 18, verifyLongMinute: 18}
-        const imageUrl = ethers.toUtf8String(imageUrlUtf8);
-        const arweaveId = await getArweaveIdFromUrl(imageUrl);
-        const verifierContract = await verifierContracts.find(async (contract) => (await contract.getAddress()).toString() === verifier);
-        const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-            degreesToVerify,
-            `${circuitsFolder}coordinate-circuit-${arweaveId}_js/coordinate-circuit-${arweaveId}.wasm`,
-            `${circuitsFolder}coordinate-circuit-${arweaveId}.zkey`);
-        const solidityCallData = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
-        const convertedCallData = await convertCallData(solidityCallData);
-        const verifyResponse = await verifierContract.connect(reviewerWallet).verifyProof(convertedCallData.a, convertedCallData.b, convertedCallData.c, convertedCallData.input);
+    const [contributionId, participant, reviewer, imageUrlUtf8, verifier] = event.args;
+    const degreesToVerify = { verifyLatDegree: -23, verifyLatMinute: 12, verifyLongDegree: 18, verifyLongMinute: 18}
+    const imageUrl = ethers.toUtf8String(imageUrlUtf8);
+    const arweaveId = await getArweaveIdFromUrl(imageUrl);
+    const verifierContract = await verifierContracts.find(async (contract) => (await contract.getAddress()).toString() === verifier);
+    const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+        degreesToVerify,
+        `${circuitsFolder}coordinate-circuit-${arweaveId}_js/coordinate-circuit-${arweaveId}.wasm`,
+        `${circuitsFolder}coordinate-circuit-${arweaveId}.zkey`);
+    const solidityCallData = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
+    const convertedCallData = await convertCallData(solidityCallData);
+    const verifyResponse = await verifierContract.connect(reviewerWallet).verifyProof(convertedCallData.a, convertedCallData.b, convertedCallData.c, convertedCallData.input);
 
-        const degreeString = `${degreesToVerify.latVerify}, ${degreesToVerify.lonVerify}`;
-        verifications.push([imageUrl, verifier, degreeString, publicSignals[0], verifyResponse]);
-    }
+    const degreeString = `${degreesToVerify.latVerify}, ${degreesToVerify.lonVerify}`;
+    verifications.push([imageUrl, verifier, degreeString, publicSignals[0], verifyResponse]);
+
 
     return verifications;
 }
@@ -475,7 +474,8 @@ module.exports = {
         const verifierContracts = deployProofsResult.verifierContracts;
 
         const verifierEvents = await getVerifierUpdatedEvents(CSPlatform);
-        const verifications = await verifyProof(CSPlatform, verifierContracts, reviewerWallet, verifierEvents, urlCoordinatesMapping);
+        const currentVerifierEvent = verifierEvents[verifierEvents.length - 1];
+        const verifications = await verifyProof(CSPlatform, verifierContracts, reviewerWallet, currentVerifierEvent, urlCoordinatesMapping);
 
 
         return {CSPlatform: CSPlatform, verifications: verifications};
