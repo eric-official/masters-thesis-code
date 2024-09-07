@@ -29,7 +29,7 @@ module.exports = {
         }
 
         for (let i = 0; i < reviewerWallets.length; i++) {
-            let walletName = "Wallet " + (i + participantWallets.length + 1);
+            let walletName = "Wallet " + (i + 1);
             let walletAddress = reviewerWallets[i].address;
             let walletPrivateKey = reviewerWallets[i].privateKey;
             let walletBalance = await provider.getBalance(reviewerWallets[i].address);

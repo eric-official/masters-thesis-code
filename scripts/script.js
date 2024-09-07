@@ -1,5 +1,7 @@
 const {ethers} = require('hardhat')
-const {getContributionCreatedEvents, getContributionAssignedEvents, getCoordinateUpdatedEvents} = require('./events')
+const {getContributionCreatedEvents, getContributionAssignedEvents, getCoordinateUpdatedEvents,
+    getContributionReviewedEvents
+} = require('./events')
 const {formatCoordinatesToBytes, getImageURLs, deleteVerifierContracts} = require('./utils')
 const {displayWallets, displayCreatedContributions, displayAssignedContributions, displayUpdatedCoordinates, displayDecryptedCoordinates,
     displayReviewedContributions,
@@ -38,9 +40,8 @@ async function createWallets(numWallets, signer, provider) {
 
 
 async function splitWallets(connectedWallets, participantReviewerRatio) {
-    const cutoffIndex = connectedWallets.length * participantReviewerRatio;
-    const participantWallets = connectedWallets.slice(0, cutoffIndex);
-    const reviewerWallets = connectedWallets.slice(cutoffIndex, connectedWallets.length + 1);
+    const participantWallets = connectedWallets;
+    const reviewerWallets = connectedWallets.slice(0, 1);
 
     return [participantWallets, reviewerWallets];
 }
@@ -52,27 +53,22 @@ async function createContributions(CSPlatform, participantWallet, imageUrl, cont
     const imageUrlBytes = ethers.toUtf8Bytes(imageUrl);
     const animalSpeciesBytes32 = animalSpecies.map(animal => ethers.encodeBytes32String(animal));
 
-
+    const startTime = Date.now();
     const createContributionResponse1 = await CSPlatform.connect(participantWallet).createContribution(imageUrlBytes, Date.now(), animalSpeciesBytes32);
     await createContributionResponse1.wait();
+    const totalTime = Date.now() - startTime;
 
-    return CSPlatform;
+    return {CSPlatform: CSPlatform, time: totalTime};
 }
 
 
 async function assignContributions(CSPlatform, reviewerWallet) {
-    let i = 0;
-    while (true) {
-        try {
-            const assignContributionResponse = await CSPlatform.connect(reviewerWallet).assignContribution();
-            await assignContributionResponse.wait();
-        } catch (error) {
-            break;
-        }
-        i++;
-    }
+    const startTime = Date.now();
+    const assignContributionResponse = await CSPlatform.connect(reviewerWallet).assignContribution();
+    await assignContributionResponse.wait();
+    const totalTime = Date.now() - startTime;
 
-    return CSPlatform;
+    return {CSPlatform: CSPlatform, time: totalTime};
 }
 
 
@@ -90,11 +86,12 @@ async function updateCoordinates(CSPlatform, participantWallet, reviewerWallet, 
     const encryptedCoordinates = await eccrypto.encrypt(reviewerPublicKey, coordinatesBuffer);
     const formattedCoordinates = await formatCoordinatesToBytes(encryptedCoordinates);
 
+    const startTime = Date.now();
     const updateCoordinatesResponse = await CSPlatform.connect(participantWallet).updateCoordinates(id, formattedCoordinates);
     await updateCoordinatesResponse.wait();
+    const totalTime = Date.now() - startTime;
 
-
-    return CSPlatform;
+    return {CSPlatform: CSPlatform, time: totalTime};
 }
 
 
@@ -104,44 +101,62 @@ async function reviewContributions(CSPlatform, reviewerWallet, provider) {
     const event = events[events.length - 1];
     const [id, participant, reviewer, image] = event.args;
 
-    const reviewResponse = await CSPlatform.connect(reviewerWallet).reviewContribution(id, 1, 1, 0, 1, 1);
+    const startTime = Date.now();
+    const reviewResponse = await CSPlatform.connect(reviewerWallet).reviewContribution(id, 1, 1, 1, 1, 5);
     await reviewResponse.wait();
+    const totalTime = Date.now() - startTime;
 
-    return CSPlatform;
+    return {CSPlatform: CSPlatform, time: totalTime};
 }
 
 
 async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl, provider, i) {
     const participantInitialBalance = await provider.getBalance(participantWallet.address);
     const reviewerInitialBalance = await provider.getBalance(reviewerWallet.address);
-    const initialTime = Date.now();
+    const startTime = Date.now();
 
-    CSPlatform = await createContributions(CSPlatform, participantWallet, imageUrl, contributionData);
+    let initialTime = Date.now();
+    const createContributionResult = await createContributions(CSPlatform, participantWallet, imageUrl, contributionData);
+    CSPlatform = createContributionResult.CSPlatform;
+    const createTimeOn = createContributionResult.time;
+    const createTimeOff = Date.now() - initialTime - createTimeOn;
     const participantCreateBalance = await provider.getBalance(participantWallet.address);
     const reviewerCreateBalance = await provider.getBalance(reviewerWallet.address);
-    const createTime = Date.now();
 
-    CSPlatform = await assignContributions(CSPlatform, reviewerWallet);
+    initialTime = Date.now();
+    const assignContributionResult = await assignContributions(CSPlatform, reviewerWallet);
+    CSPlatform = assignContributionResult.CSPlatform;
+    const assignTimeOn = assignContributionResult.time;
+    const assignTimeOff = Date.now() - initialTime - assignTimeOn;
     const participantAssignBalance = await provider.getBalance(participantWallet.address);
     const reviewerAssignBalance = await provider.getBalance(reviewerWallet.address);
-    const assignTime = Date.now();
 
-    CSPlatform = await updateCoordinates(CSPlatform, participantWallet, reviewerWallet, contributionData);
+    initialTime = Date.now();
+    const updateCoordinatesResult = await updateCoordinates(CSPlatform, participantWallet, reviewerWallet, contributionData);
+    CSPlatform = updateCoordinatesResult.CSPlatform;
+    const updateTimeOn = updateCoordinatesResult.time;
+    const updateTimeOff = Date.now() - initialTime - updateTimeOn;
     const participantUpdateBalance = await provider.getBalance(participantWallet.address);
     const reviewerUpdateBalance = await provider.getBalance(reviewerWallet.address);
-    const updateTime = Date.now();
 
-    CSPlatform = await reviewContributions(CSPlatform, reviewerWallet, provider);
+    initialTime = Date.now();
+    const reviewContributionResult = await reviewContributions(CSPlatform, reviewerWallet, provider);
+    CSPlatform = reviewContributionResult.CSPlatform;
+    const reviewTimeOn = reviewContributionResult.time;
+    const reviewTimeOff = Date.now() - initialTime - reviewTimeOn;
     const participantReviewBalance = await provider.getBalance(participantWallet.address);
     const reviewerReviewBalance = await provider.getBalance(reviewerWallet.address);
-    const reviewTime = Date.now();
 
+    initialTime = Date.now();
     const createZKPContractsRes = await createZKPContracts(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl);
     CSPlatform = createZKPContractsRes.CSPlatform;
+    const zkpTimeOn = createZKPContractsRes.time;
+    const zkpTimeOff = Date.now() - initialTime - zkpTimeOn;
     const verifications = createZKPContractsRes.verifications;
     const participantFinalBalance = await provider.getBalance(participantWallet.address);
     const reviewerFinalBalance = await provider.getBalance(reviewerWallet.address);
-    const finalTime = Date.now();
+
+    const totalTime = Date.now() - startTime;
 
     const participantBalances = {
         step: i + 1,
@@ -169,12 +184,17 @@ async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWa
 
     const timeRecord = {
         step: i + 1,
-        initial: initialTime,
-        create: createTime,
-        assign: assignTime,
-        update: updateTime,
-        review: reviewTime,
-        final: finalTime
+        createOn: createTimeOn,
+        createOff: createTimeOff,
+        assignOn: assignTimeOn,
+        assignOff: assignTimeOff,
+        updateOn: updateTimeOn,
+        updateOff: updateTimeOff,
+        reviewOn: reviewTimeOn,
+        reviewOff: reviewTimeOff,
+        zkpOn: zkpTimeOn,
+        zkpOff: zkpTimeOff,
+        total: totalTime
     }
 
     return {CSPlatform: CSPlatform, participantBalances: participantBalances, reviewerBalances: reviewerBalances, timeRecord: timeRecord};
@@ -185,11 +205,9 @@ async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWa
 async function main() {
 
     // Constants for simulating test cases
-    const SIMULATION_MODE = (process.argv[2] || "Staged")
+    const SIMULATION_MODE = (process.argv[2] || "Standard")
     const NUM_WALLETS = (process.argv[3] || 2);
-    const PARTICIPANT_REVIEWER_RATIO = (process.argv[4] || 0.5);
-    const NUM_CONTRIBUTIONS = (process.argv[5] || 1);
-    const LOG_CONTRIBUTIONS = (process.argv[6] || false);
+    const NUM_CONTRIBUTIONS = (process.argv[4] || 1);
 
     // Assumed user inputs
     let contributionData = {
@@ -210,7 +228,7 @@ async function main() {
 
     console.log("Create wallets...");
     const connectedWallets = await createWallets(NUM_WALLETS, signer, provider);
-    const [participantWallets, reviewerWallets] = await splitWallets(connectedWallets, PARTICIPANT_REVIEWER_RATIO);
+    const [participantWallets, reviewerWallets] = await splitWallets(connectedWallets);
     await displayWallets(participantWallets, reviewerWallets, provider);
     console.log("Wallets created!");
     console.log(" ");
@@ -241,15 +259,30 @@ async function main() {
     progressBar.start(NUM_CONTRIBUTIONS, 0);
     const balanceRecords = [];
     const timeRecords = [];
-
-    const tempTime = Date.now();
+    let round = 1;
+    let numReviewsInRound = 0;
 
     for (let i = 0; i < NUM_CONTRIBUTIONS; i++) {
-        const participantIndex = (i + participantWallets.length) % participantWallets.length
-        const participantWallet = participantWallets[participantIndex];
+        let participantIndex = (i + participantWallets.length) % participantWallets.length
+        let participantWallet = participantWallets[participantIndex];
 
-        const reviewerIndex = (i + reviewerWallets.length) % reviewerWallets.length;
-        const reviewerWallet = reviewerWallets[reviewerIndex];
+        let reviewerIndex;
+        if (SIMULATION_MODE === "Rounds" && numReviewsInRound === reviewerWallets.length) {
+            numReviewsInRound = 0;
+            reviewerIndex = numReviewsInRound
+            round += 1;
+        } else if (SIMULATION_MODE === "Rounds" && numReviewsInRound < reviewerWallets.length) {
+            numReviewsInRound += 1;
+            reviewerIndex = numReviewsInRound;
+        } else {
+            reviewerIndex = (i + reviewerWallets.length) % reviewerWallets.length;
+        }
+        let reviewerWallet = reviewerWallets[reviewerIndex];
+
+        if (await participantWallet.getAddress() === await reviewerWallet.getAddress()) {
+            participantIndex = (i + 1 + participantWallets.length) % participantWallets.length
+            participantWallet = participantWallets[participantIndex];
+        }
 
         const imageIndex = (i + imageUrls.length) % imageUrls.length;
         const imageUrl = imageUrls[imageIndex];
@@ -273,10 +306,14 @@ async function main() {
         balanceRecords.push(processResults.reviewerBalances);
         timeRecords.push(processResults.timeRecord);
 
+        const contributionReviewedEvents = await getContributionReviewedEvents(CSPlatform, 1);
+        const recentEvent = contributionReviewedEvents[contributionReviewedEvents.length - 1];
+        if (Number(recentEvent.args.participantReputation) / 1e18 >= 0.7) {
+            reviewerWallets.push(participantWallet);
+        }
+
         progressBar.update(i + 1);
     }
-
-    console.log(Date.now() - tempTime);
 
     const balanceWriter = createCsvWriter({
         path: 'data/balances' + Date.now() + '.csv',
@@ -301,12 +338,17 @@ async function main() {
         path: 'data/times' + Date.now() + '.csv',
         header: [
             {id: 'step', title: 'Step'},
-            {id: 'initial', title: 'Initial Time'},
-            {id: 'create', title: 'Create Contribution'},
-            {id: 'assign', title: 'Assign Contribution'},
-            {id: 'update', title: 'Update Coordinates'},
-            {id: 'review', title: 'Review Contribution'},
-            {id: 'final', title: 'Final Time'},
+            {id: 'createOn', title: 'Create Contribution On-Chain'},
+            {id: 'createOff', title: 'Create Contribution Off-Chain'},
+            {id: 'assignOn', title: 'Assign Contribution On-Chain'},
+            {id: 'assignOff', title: 'Assign Contribution Off-Chain'},
+            {id: 'updateOn', title: 'Update Coordinates On-Chain'},
+            {id: 'updateOff', title: 'Update Coordinates Off-Chain'},
+            {id: 'reviewOn', title: 'Review Contribution On-Chain'},
+            {id: 'reviewOff', title: 'Review Contribution Off-Chain'},
+            {id: 'zkpOn', title: 'ZKP Contracts On-Chain'},
+            {id: 'zkpOff', title: 'ZKP Contracts Off-Chain'},
+            {id: 'total', title: 'Total Time' }
         ]
     });
 

@@ -416,14 +416,16 @@ async function deployProofs(CSPlatform, participantWallet, events, imageUrl) {
     const verifierPaths = verifierFile.map(file => `${contractFolder}${file}:Groth16Verifier`);
     const verifierContracts = [];
 
+    const startTime = Date.now();
     for (const verifierPath of verifierPaths) {
         const verifierContract = await deployVerifierContract(verifierPath);
         const verifierAddress = await verifierContract.getAddress()
         verifierContracts.push(verifierContract);
         CSPlatform = await addVerifierToCSPlatform(CSPlatform, verifierPath, verifierAddress, events, participantWallet);
     }
+    const totalTime = Date.now() - startTime;
 
-    return {CSPlatform: CSPlatform, verifierContracts: verifierContracts};
+    return {CSPlatform: CSPlatform, verifierContracts: verifierContracts, time: totalTime};
 }
 
 
@@ -457,7 +459,6 @@ async function verifyProof(CSPlatform, verifierContracts, reviewerWallet, event,
     const degreeString = `${degreesToVerify.latVerify}, ${degreesToVerify.lonVerify}`;
     verifications.push([imageUrl, verifier, degreeString, publicSignals[0], verifyResponse]);
 
-
     return verifications;
 }
 
@@ -471,6 +472,7 @@ module.exports = {
         await createProofs(urlCoordinatesMapping);
         const deployProofsResult = await deployProofs(CSPlatform, participantWallet, reviewEvents, imageUrl);
         CSPlatform = deployProofsResult.CSPlatform;
+        const time = deployProofsResult.time;
         const verifierContracts = deployProofsResult.verifierContracts;
 
         const verifierEvents = await getVerifierUpdatedEvents(CSPlatform);
@@ -478,6 +480,6 @@ module.exports = {
         const verifications = await verifyProof(CSPlatform, verifierContracts, reviewerWallet, currentVerifierEvent, urlCoordinatesMapping);
 
 
-        return {CSPlatform: CSPlatform, verifications: verifications};
+        return {CSPlatform: CSPlatform, verifications: verifications, time: time};
     }
 }

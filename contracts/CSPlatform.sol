@@ -46,7 +46,7 @@ contract CSPlatform {
     event ContributionCreated(address indexed participant, bytes imageUrl);
     event ContributionAssigned(uint indexed contributionId, address indexed participant, address indexed reviewer, bytes imageUrl);
     event CoordinateUpdated(uint indexed contributionId, address indexed participant, address indexed reviewer, bytes imageUrl, bytes coordinates);
-    event ContributionReviewed(uint indexed contributionId, address indexed participant, address indexed reviewer, bytes imageUrl, int result);
+    event ContributionReviewed(uint indexed contributionId, address indexed participant, address indexed reviewer, bytes imageUrl, int result, int256 participantReputation, int256 reviewerReputation);
     event VerifierUpdated(uint indexed contributionId, address indexed participant, address indexed reviewer, bytes imageUrl, address verifier);
 
     constructor() payable {
@@ -131,9 +131,7 @@ contract CSPlatform {
         contribution.dataQuality = calculateDataQuality(resultInt, _imageAssessment);
         updateReviewUsers(contribution);
 
-        //console.log(contribution.participant);
-        //console.logInt(int256(SD59x18.unwrap(users[contribution.participant].reputation)));
-        emit ContributionReviewed(_contributionId, contribution.participant, contribution.reviewer, contribution.imageUrl, 1);
+        emit ContributionReviewed(_contributionId, contribution.participant, contribution.reviewer, contribution.imageUrl, resultInt, SD59x18.unwrap(users[contribution.participant].reputation), SD59x18.unwrap(users[contribution.reviewer].reputation));
     }
 
     function updateVerifier(address _verifier, uint _contributionId) public {
