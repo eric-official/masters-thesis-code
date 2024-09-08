@@ -197,7 +197,7 @@ contract CSPlatform {
     }
 
     function calculateMultiplier(uint _nContributions, uint _nReviews) private pure returns (SD59x18) {
-        SD59x18 multiplier = sd(1e18).add(sd(int(_nContributions) * 1e17).add(sd(int(_nReviews) * 1e16)));
+        SD59x18 multiplier = sd(1e18).add(sd(int(_nContributions) * 1e16).add(sd(int(_nReviews) * 1e14)));
         return multiplier;
     }
 

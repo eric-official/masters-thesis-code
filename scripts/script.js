@@ -40,7 +40,7 @@ async function createWallets(numWallets, signer, provider) {
 
 
 async function splitWallets(connectedWallets, participantReviewerRatio) {
-    const participantWallets = connectedWallets;
+    const participantWallets = connectedWallets.slice(1, connectedWallets.length);
     const reviewerWallets = connectedWallets.slice(0, 1);
 
     return [participantWallets, reviewerWallets];
@@ -206,8 +206,9 @@ async function main() {
 
     // Constants for simulating test cases
     const SIMULATION_MODE = (process.argv[2] || "Standard")
-    const NUM_WALLETS = (process.argv[3] || 2);
-    const NUM_CONTRIBUTIONS = (process.argv[4] || 1);
+    const PARTICIPANT_SELECTION = (process.argv[3] || "Alternating");
+    const NUM_WALLETS = (process.argv[4] || 2);
+    const NUM_CONTRIBUTIONS = (process.argv[5] || 1);
 
     // Assumed user inputs
     let contributionData = {
@@ -259,30 +260,34 @@ async function main() {
     progressBar.start(NUM_CONTRIBUTIONS, 0);
     const balanceRecords = [];
     const timeRecords = [];
+    const roundRecords = [];
+    roundRecords.push({ round: 0, numReviews: 1 });
     let round = 1;
     let numReviewsInRound = 0;
 
     for (let i = 0; i < NUM_CONTRIBUTIONS; i++) {
-        let participantIndex = (i + participantWallets.length) % participantWallets.length
+        let participantIndex
+        if (PARTICIPANT_SELECTION === "Subsequent") {
+            participantIndex = 0;
+        } else {
+            participantIndex = (i + participantWallets.length) % participantWallets.length
+        }
         let participantWallet = participantWallets[participantIndex];
 
         let reviewerIndex;
         if (SIMULATION_MODE === "Rounds" && numReviewsInRound === reviewerWallets.length) {
+            const roundRecord = { round: round, numReviews: numReviewsInRound }
+            roundRecords.push(roundRecord);
             numReviewsInRound = 0;
             reviewerIndex = numReviewsInRound
             round += 1;
         } else if (SIMULATION_MODE === "Rounds" && numReviewsInRound < reviewerWallets.length) {
-            numReviewsInRound += 1;
             reviewerIndex = numReviewsInRound;
+            numReviewsInRound += 1;
         } else {
             reviewerIndex = (i + reviewerWallets.length) % reviewerWallets.length;
         }
         let reviewerWallet = reviewerWallets[reviewerIndex];
-
-        if (await participantWallet.getAddress() === await reviewerWallet.getAddress()) {
-            participantIndex = (i + 1 + participantWallets.length) % participantWallets.length
-            participantWallet = participantWallets[participantIndex];
-        }
 
         const imageIndex = (i + imageUrls.length) % imageUrls.length;
         const imageUrl = imageUrls[imageIndex];
@@ -308,10 +313,10 @@ async function main() {
 
         const contributionReviewedEvents = await getContributionReviewedEvents(CSPlatform, 1);
         const recentEvent = contributionReviewedEvents[contributionReviewedEvents.length - 1];
-        if (Number(recentEvent.args.participantReputation) / 1e18 >= 0.7) {
+        if (Number(recentEvent.args.participantReputation) / 1e18 >= 0.7 && participantWallets.length > 1) {
             reviewerWallets.push(participantWallet);
+            participantWallets.splice(participantIndex, 1);
         }
-
         progressBar.update(i + 1);
     }
 
@@ -331,7 +336,6 @@ async function main() {
             {id: 'contractFinal', title: 'Contract Final Balance'}
         ]
     });
-
     await balanceWriter.writeRecords(balanceRecords)
 
     const timeWriter = createCsvWriter({
@@ -351,8 +355,16 @@ async function main() {
             {id: 'total', title: 'Total Time' }
         ]
     });
-
     await timeWriter.writeRecords(timeRecords)
+
+    const roundWriter = createCsvWriter({
+        path: 'data/rounds' + Date.now() + '.csv',
+        header: [
+            {id: 'round', title: 'Round'},
+            {id: 'numReviews', title: 'Number of Reviews'}
+        ]
+    });
+    await roundWriter.writeRecords(roundRecords)
 
     progressBar.stop();
 }
