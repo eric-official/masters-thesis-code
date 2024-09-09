@@ -95,6 +95,16 @@ To get a local copy up and running follow these simple example steps.
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
+## Security Audit of the Smart Contract
+
+To audit the smart contract CSPlatform.sol, execute the following steps:
+
+1. Open the remappings.json file
+2. Change the directory `/Users/ericnaser/...` to your local path for the SD59x18.sol file of the prb-math library.
+3. Run the following command in the terminal:
+    ```sh
+    myth analyze contracts/CSPlatform.sol --solc-json remappings.json --max-depth 15
+    ```
 
 <!-- LICENSE -->
 ## License

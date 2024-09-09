@@ -332,9 +332,7 @@ async function deployVerifierContract(verifierPath) {
  * @type {(CSPlatform: CSPlatform, verifierPath: string, verifierAddress: string, events: Array, participantWallets: Array) => Promise<CSPlatform>}
  */
 async function addVerifierToCSPlatform(CSPlatform, verifierPath, verifierAddress, events, participantWallet) {
-    const cleanedVerifierPath = verifierPath.replace("contracts/coordinate-verifier-", "").replace(".sol:Groth16Verifier", "");
-    const imageUrl = `https://arweave.net/${cleanedVerifierPath}`;
-    const contribution = events.find(event => ethers.toUtf8String(event.args.imageUrl) === imageUrl);
+    const contribution = events[events.length - 1];
 
     const updateVerifierResponse1 = await CSPlatform.connect(participantWallet).updateVerifier(verifierAddress, contribution.args.contributionId);
     await updateVerifierResponse1.wait();

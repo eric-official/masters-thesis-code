@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
 
-// Uncomment this line to use console.log
 import "hardhat/console.sol";
 import { SD59x18, sd, unwrap } from "@prb/math/src/SD59x18.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
 
 
 contract CSPlatform {
 
-    enum ContributionStatus {Created, Assigned, Reviewed}
+    enum ContributionStatus {Created, Assigned, Reviewed, ParticipantPaid, ReviewerPaid}
     enum ContributionResult {Punished, Rejected, Accepted, None}
 
     struct Contribution {
@@ -118,14 +116,14 @@ contract CSPlatform {
         emit ContributionAssigned(assignedContributionsIndex, contribution.participant, msg.sender, contribution.imageUrl);
     }
 
-    function updateCoordinates(uint _contributionId, bytes memory _coordinates) public {
+    function updateCoordinates(uint _contributionId, bytes memory _coordinates) public onlyParticipant(_contributionId) {
         Contribution storage contribution = assignedContributions[_contributionId];
         contribution.coordinates = _coordinates;
         assignedContributions[_contributionId] = contribution;
         emit CoordinateUpdated(_contributionId, msg.sender, contribution.reviewer, contribution.imageUrl, _coordinates);
     }
 
-    function reviewContribution(uint _contributionId, int _urlAssessment, int _timestampAssessment, int _coordinatesAssessment, int _animalSpeciesAssessment, int _imageAssessment) public {
+    function reviewContribution(uint _contributionId, int _urlAssessment, int _timestampAssessment, int _coordinatesAssessment, int _animalSpeciesAssessment, int _imageAssessment) public onlyReviewer(_contributionId) {
         Contribution storage contribution = assignedContributions[_contributionId];
         int resultInt = calculateReviewResult(contribution, _contributionId, _urlAssessment, _timestampAssessment, _coordinatesAssessment, _animalSpeciesAssessment);
         contribution.dataQuality = calculateDataQuality(resultInt, _imageAssessment);
@@ -134,10 +132,10 @@ contract CSPlatform {
         emit ContributionReviewed(_contributionId, contribution.participant, contribution.reviewer, contribution.imageUrl, resultInt, SD59x18.unwrap(users[contribution.participant].reputation), SD59x18.unwrap(users[contribution.reviewer].reputation));
     }
 
-    function updateVerifier(address _verifier, uint _contributionId) public {
+    function updateVerifier(address _verifier, uint _contributionId) public onlyParticipant(_contributionId) {
         Contribution storage contribution = assignedContributions[_contributionId];
         contribution.verifier = _verifier;
-        rewardReviewUsers(contribution.dataQuality, contribution.participant, contribution.reviewer);
+        rewardReviewUsers(contribution.dataQuality, contribution.participant, contribution.reviewer, _contributionId);
         assignedContributions[_contributionId] = contribution;
         emit VerifierUpdated(_contributionId, contribution.participant, contribution.reviewer, contribution.imageUrl, _verifier);
     }
@@ -174,13 +172,14 @@ contract CSPlatform {
         users[msg.sender].reputation = reviewerReputation;
     }
 
-    function rewardReviewUsers(SD59x18 _dataQuality, address _participant, address _reviewer) private {
+    function rewardReviewUsers(SD59x18 _dataQuality, address _participant, address _reviewer, uint _contributionId) private {
         SD59x18 participantReward = calculateParticipantReward(_dataQuality, users[_participant].reputation);
         SD59x18 reviewerReward = calculateReviewerReward(users[_reviewer].reputation);
+
         if (_dataQuality > sd(0.00e18)) {
-            sendViaCall(payable(_participant), int256(unwrap(participantReward)));
+                sendViaCall(payable(_participant), int256(unwrap(participantReward)), _contributionId);
         }
-        sendViaCall(payable(_reviewer), int256(unwrap(reviewerReward)));
+        sendViaCall(payable(_reviewer), int256(unwrap(reviewerReward)), _contributionId);
     }
 
     function calculateDataQuality(int _result, int _imageAssessment) private pure returns (SD59x18) {
@@ -230,13 +229,51 @@ contract CSPlatform {
         return reward;
     }
 
-    function sendViaCall(address payable _to, int256 value) public payable {
-        (bool sent, bytes memory data) = _to.call{value: uint256(value)}(""); // Returns false on failure
+    function sendViaCall(address payable _to, int256 _value, uint _contributionId) public payable notPaid(_to, _contributionId) {
+        Contribution storage contribution = assignedContributions[_contributionId];
+
+        if (contribution.status == ContributionStatus.Reviewed) {
+            contribution.status = ContributionStatus.ParticipantPaid;
+        } else if (contribution.status == ContributionStatus.ParticipantPaid) {
+            contribution.status = ContributionStatus.ReviewerPaid;
+        } else {
+            revert("Invalid contribution status");
+        }
+        assignedContributions[_contributionId] = contribution;
+
+        (bool sent, ) = _to.call{value: uint256(_value)}(""); // Returns false on failure
         require(sent, "Failed to send Ether");
     }
 
     modifier unassignedContributionExists() {
         require(unassignedContributions.length > 0, "No unassigned contributions available");
+        _;
+    }
+
+    modifier onlyParticipant(uint _contributionId) {
+        require(assignedContributions[_contributionId].participant == msg.sender, "Only the participant can call this function");
+        _;
+    }
+
+    modifier onlyReviewer(uint _contributionId) {
+        require(assignedContributions[_contributionId].reviewer == msg.sender, "Only the reviewer can call this function");
+        _;
+    }
+
+    modifier notPaid(address _to, uint _contributionId) {
+        Contribution memory contribution = assignedContributions[_contributionId];
+
+        bool isReviewedAndParticipant = (
+        contribution.status == ContributionStatus.Reviewed &&
+        contribution.participant == _to
+        );
+
+        bool isPaidAndReviewer = (
+        contribution.status == ContributionStatus.ParticipantPaid &&
+        contribution.reviewer == _to
+        );
+
+        require(isReviewedAndParticipant || isPaidAndReviewer, "Reward already paid");
         _;
     }
 }

@@ -1,0 +1,6 @@
+{
+  "remappings": [
+    "hardhat/console.sol=node_modules/hardhat/console.sol",
+    "@prb/math/src/SD59x18.sol=/Users/ericnaser/Dropbox/Wirtschaftsinformatik_Master/5. Semester/masters-thesis-code/node_modules/@prb/math/src/SD59x18.sol"
+  ]
+}
