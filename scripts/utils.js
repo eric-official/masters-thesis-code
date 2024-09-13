@@ -178,5 +178,59 @@ module.exports = {
         for (const file of verifierFiles) {
             fs.unlinkSync(`contracts/${file}`);
         }
+    },
+
+
+    generateRandomCoordinates: async function(contributionData) {
+        const extractedCoordinates = await module.exports.extractDegreesFromCoordinate(contributionData.coordinates);
+        const latMin = extractedCoordinates.latMin;
+        const longMin = extractedCoordinates.longMin;
+
+        // find a smaller number than latMin that is divisible by 6 if latMin is not divisible by 6
+        let lowerLatMinBorder = latMin;
+        const latMinArr = []
+        while (lowerLatMinBorder % 6 !== 0) {
+            lowerLatMinBorder++;
+        }
+        latMinArr.push(lowerLatMinBorder);
+        lowerLatMinBorder += 6;
+
+        // find a larger number than latMin that is divisible by 6 if latMin is not divisible by 6
+        let upperLatMinBorder = latMin;
+        while (upperLatMinBorder % 6 !== 0) {
+            upperLatMinBorder--;
+        }
+        latMinArr.push(upperLatMinBorder);
+        upperLatMinBorder -= 6;
+        latMinArr.push(upperLatMinBorder);
+
+        let lowerLongMinBorder = longMin;
+        const longMinArr = []
+        while (lowerLongMinBorder % 6 !== 0) {
+            lowerLongMinBorder--;
+        }
+        longMinArr.push(lowerLongMinBorder);
+        lowerLongMinBorder -= 6;
+        longMinArr.push(lowerLongMinBorder);
+
+        let upperLongMinBorder = longMin;
+        while (upperLongMinBorder % 6 !== 0) {
+            upperLongMinBorder++;
+        }
+        longMinArr.push(upperLongMinBorder);
+        upperLongMinBorder += 6;
+
+        // generate random coordinates
+        let randomLatMin;
+        let randomLongMin;
+        if (Math.random() > 0.5) {
+            randomLatMin = Math.floor(Math.random() * (upperLatMinBorder - lowerLatMinBorder) + lowerLatMinBorder);
+            randomLongMin = Math.floor(Math.random() * (upperLongMinBorder - lowerLongMinBorder) + lowerLongMinBorder);
+        } else {
+            randomLatMin = latMinArr[Math.floor(Math.random() * latMinArr.length)];
+            randomLongMin = longMinArr[Math.floor(Math.random() * longMinArr.length)];
+        }
+
+        return { verifyLatDegree: extractedCoordinates.latDeg, verifyLatMinute: randomLatMin, verifyLongDegree: extractedCoordinates.longDeg, verifyLongMinute: randomLongMin };
     }
 }

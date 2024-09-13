@@ -3,7 +3,8 @@ const fs = require('fs');
 const snarkjs = require('snarkjs')
 const {ethers} = require('hardhat')
 const { getContributionReviewedEvents, getVerifierUpdatedEvents } = require('./events');
-const { updateContributionData, getArweaveIdFromUrl, deleteVerifierContracts} = require('./utils');
+const { updateContributionData, getArweaveIdFromUrl, generateRandomCoordinates} = require('./utils');
+const {createObjectCsvWriter: createCsvWriter} = require("csv-writer");
 
 
 /**
@@ -195,17 +196,17 @@ async function createCircuitCode(imageLatDeg, imageLatMin, imageLongDeg, imageLo
     
         // Minute checks for latitude
         component latMinuteNorthCheck = LessEqThan(10);
-        latMinuteNorthCheck.in[0] <== imageLatMinute;
-        latMinuteNorthCheck.in[1] <== verifyLatMinute;
+        latMinuteNorthCheck.in[0] <== verifyLatMinute;
+        latMinuteNorthCheck.in[1] <== imageLatMinute;
         latMinuteNorthResult <== latMinuteNorthCheck.out;
     
-        component latMinuteSouthCheck = GreaterThan(10);
+        component latMinuteSouthCheck = LessThan(10);
         latMinuteSouthCheck.in[0] <== imageLatMinute;
-        latMinuteSouthCheck.in[1] <== verifyLatMinute - 6;
+        latMinuteSouthCheck.in[1] <== verifyLatMinute + 6;
         latMinuteSouthResult <== latMinuteSouthCheck.out;
     
         // Minute checks for longitude
-        component longMinuteWestCheck = GreaterEqThan(10);
+        component longMinuteWestCheck = LessEqThan(10);
         longMinuteWestCheck.in[0] <== verifyLongMinute;
         longMinuteWestCheck.in[1] <== imageLongMinute;
         longMinuteWestResult <== longMinuteWestCheck.out;
@@ -437,33 +438,32 @@ async function deployProofs(CSPlatform, participantWallet, events, imageUrl) {
  * @returns {Promise<Array.<string, string, string, number, bool>>}
  * @type {(CSPlatform: CSPlatform, verifierContracts: Array, reviewerWallets: Array, events: Array, urlDegreeMapping: Object) => Promise<Array.<string, string, string, number, bool>>}
  */
-async function verifyProof(CSPlatform, verifierContracts, reviewerWallet, event, urlDegreeMapping) {
+async function verifyProof(CSPlatform, verifierContracts, reviewerWallet, event, urlDegreeMapping, degreesToVerify) {
     const circuitsFolder = './circuits/';
-    const verifications = [];
 
-    const [contributionId, participant, reviewer, imageUrlUtf8, verifier] = event.args;
-    const degreesToVerify = { verifyLatDegree: -23, verifyLatMinute: 12, verifyLongDegree: 18, verifyLongMinute: 18}
-    const imageUrl = ethers.toUtf8String(imageUrlUtf8);
-    const arweaveId = await getArweaveIdFromUrl(imageUrl);
-    const verifierContract = await verifierContracts.find(async (contract) => (await contract.getAddress()).toString() === verifier);
-    const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-        degreesToVerify,
-        `${circuitsFolder}coordinate-circuit-${arweaveId}_js/coordinate-circuit-${arweaveId}.wasm`,
-        `${circuitsFolder}coordinate-circuit-${arweaveId}.zkey`);
-    const solidityCallData = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
-    const convertedCallData = await convertCallData(solidityCallData);
-    const verifyResponse = await verifierContract.connect(reviewerWallet).verifyProof(convertedCallData.a, convertedCallData.b, convertedCallData.c, convertedCallData.input);
-
-    const degreeString = `${degreesToVerify.latVerify}, ${degreesToVerify.lonVerify}`;
-    verifications.push([imageUrl, verifier, degreeString, publicSignals[0], verifyResponse]);
-
-    return verifications;
+    try {
+        const [contributionId, participant, reviewer, imageUrlUtf8, verifier] = event.args;
+        const imageUrl = ethers.toUtf8String(imageUrlUtf8);
+        const arweaveId = await getArweaveIdFromUrl(imageUrl);
+        const verifierContract = await verifierContracts.find(async (contract) => (await contract.getAddress()).toString() === verifier);
+        const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+            degreesToVerify,
+            `${circuitsFolder}coordinate-circuit-${arweaveId}_js/coordinate-circuit-${arweaveId}.wasm`,
+            `${circuitsFolder}coordinate-circuit-${arweaveId}.zkey`);
+        const solidityCallData = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
+        const convertedCallData = await convertCallData(solidityCallData);
+        const verifyResponse = await verifierContract.connect(reviewerWallet).verifyProof(convertedCallData.a, convertedCallData.b, convertedCallData.c, convertedCallData.input);
+        return Number(publicSignals[0]);
+    }
+    catch (error) {
+        return -1;
+    }
 }
 
 
 module.exports = {
 
-    createZKPContracts: async function(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl) {
+    createZKPContracts: async function(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl, FUZZY_TEST) {
         const reviewEvents = await getContributionReviewedEvents(CSPlatform, 1);
         const urlCoordinatesMapping = await updateContributionData(contributionData);
 
@@ -475,9 +475,32 @@ module.exports = {
 
         const verifierEvents = await getVerifierUpdatedEvents(CSPlatform);
         const currentVerifierEvent = verifierEvents[verifierEvents.length - 1];
-        const verifications = await verifyProof(CSPlatform, verifierContracts, reviewerWallet, currentVerifierEvent, urlCoordinatesMapping);
+
+        if (FUZZY_TEST === 'False') {
+            const degreesToVerify = { verifyLatDegree: -23, verifyLatMinute: 6, verifyLongDegree: 18, verifyLongMinute: 18}
+            await verifyProof(CSPlatform, verifierContracts, reviewerWallet, currentVerifierEvent, urlCoordinatesMapping, degreesToVerify);
+        } else {
+            const verificationLog = [];
+            for (let i = 0; i < 1000; i++) {
+                const degreesToVerify = await generateRandomCoordinates(contributionData[imageUrl]);
+                degreesToVerify.verificationResult = await verifyProof(CSPlatform, verifierContracts, reviewerWallet, currentVerifierEvent, urlCoordinatesMapping, degreesToVerify);
+                verificationLog.push(degreesToVerify);
+            }
+
+            const verificationWriter = createCsvWriter({
+                path: 'data/verifications' + Date.now() + '.csv',
+                header: [
+                    {id: 'verifyLatDegree', title: 'verifyLatDegree'},
+                    {id: 'verifyLatMinute', title: 'verifyLatMinute'},
+                    {id: 'verifyLongDegree', title: 'verifyLongDegree'},
+                    {id: 'verifyLongMinute', title: 'verifyLongMinute'},
+                    {id: 'verificationResult', title: 'verificationResult'}
+                ]
+            });
+            await verificationWriter.writeRecords(verificationLog);
+        }
 
 
-        return {CSPlatform: CSPlatform, verifications: verifications, time: time};
+        return {CSPlatform: CSPlatform, time: time};
     }
 }

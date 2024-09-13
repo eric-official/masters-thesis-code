@@ -102,7 +102,7 @@ async function reviewContributions(CSPlatform, reviewerWallet, provider) {
     const [id, participant, reviewer, image] = event.args;
 
     const startTime = Date.now();
-    const reviewResponse = await CSPlatform.connect(reviewerWallet).reviewContribution(id, 1, 1, 1, 1, 5);
+    const reviewResponse = await CSPlatform.connect(reviewerWallet).reviewContribution(id, 1, 1, 1, 1, 1);
     await reviewResponse.wait();
     const totalTime = Date.now() - startTime;
 
@@ -110,7 +110,7 @@ async function reviewContributions(CSPlatform, reviewerWallet, provider) {
 }
 
 
-async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl, provider, i) {
+async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl, provider, i, FUZZY_TEST) {
     const participantInitialBalance = await provider.getBalance(participantWallet.address);
     const reviewerInitialBalance = await provider.getBalance(reviewerWallet.address);
     const startTime = Date.now();
@@ -148,11 +148,10 @@ async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWa
     const reviewerReviewBalance = await provider.getBalance(reviewerWallet.address);
 
     initialTime = Date.now();
-    const createZKPContractsRes = await createZKPContracts(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl);
+    const createZKPContractsRes = await createZKPContracts(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl, FUZZY_TEST);
     CSPlatform = createZKPContractsRes.CSPlatform;
     const zkpTimeOn = createZKPContractsRes.time;
     const zkpTimeOff = Date.now() - initialTime - zkpTimeOn;
-    const verifications = createZKPContractsRes.verifications;
     const participantFinalBalance = await provider.getBalance(participantWallet.address);
     const reviewerFinalBalance = await provider.getBalance(reviewerWallet.address);
 
@@ -209,6 +208,7 @@ async function main() {
     const PARTICIPANT_SELECTION = (process.argv[3] || "Alternating");
     const NUM_WALLETS = (process.argv[4] || 2);
     const NUM_CONTRIBUTIONS = (process.argv[5] || 1);
+    const FUZZY_TEST = (process.argv[6] || 'False');
 
     // Assumed user inputs
     let contributionData = {
@@ -234,13 +234,13 @@ async function main() {
     console.log("Wallets created!");
     console.log(" ");
 
-    const tx2 = await signer.sendTransaction({to: reviewerWallets[0].address, value: ethers.parseEther("10")});
+    const tx2 = await signer.sendTransaction({to: reviewerWallets[0].address, value: ethers.parseEther("1000")});
     await tx2.wait();
 
     console.log("Deploying CSPlatform...");
     const CSPlatformFactory = await ethers.getContractFactory("CSPlatform", reviewerWallets[0]);
     let CSPlatform = await CSPlatformFactory.deploy({
-        value: ethers.parseEther("10") // 1 Ether, adjust the amount as needed
+        value: ethers.parseEther("1000") // 1 Ether, adjust the amount as needed
     });
     await CSPlatform.waitForDeployment();
     console.log("CSPlatform deployed to:", await CSPlatform.getAddress());
@@ -296,7 +296,7 @@ async function main() {
         contributionDataElement[imageUrl] = contributionData[imageUrl]
 
         const contractInitialBalance = await provider.getBalance(await CSPlatform.getAddress());
-        const processResults = await runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWallet, contributionDataElement, imageUrl, provider, i);
+        const processResults = await runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWallet, contributionDataElement, imageUrl, provider, i, FUZZY_TEST);
         CSPlatform = processResults.CSPlatform;
         const participantBalances = processResults.participantBalances;
         const reviewerBalances = processResults.reviewerBalances;
