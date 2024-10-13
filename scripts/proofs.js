@@ -407,7 +407,7 @@ async function createProofs(urlCoordinatesMapping) {
  * @returns {Promise<{CSPlatform, verifierContracts: *[]}>}
  * @type {(CSPlatform: CSPlatform, participantWallets: Array, events: Array) => Promise<{CSPlatform: CSPlatform, verifierContracts: Array}>}
  */
-async function deployProofs(CSPlatform, participantWallet, events, imageUrl) {
+async function deployProofs(CSPlatform, participantWallet, events, imageUrl, ipfs) {
     const contractFolder = 'contracts/';
     const files = fs.readdirSync(contractFolder);
     const verifierFiles = files.filter(file => file.startsWith('coordinate-verifier'));
@@ -425,9 +425,12 @@ async function deployProofs(CSPlatform, participantWallet, events, imageUrl) {
         verifierContracts.push(verifierContract);
         CSPlatform = await addVerifierToCSPlatform(CSPlatform, verifierPath, verifierAddress, events, participantWallet);
     }
+
+    const ipfsCid = await ipfs.addFile({path: `./circuits/coordinate-circuit-${imageId}_js/coordinate-circuit-${imageId}.wasm`})
+
     const totalTime = Date.now() - startTime;
 
-    return {CSPlatform: CSPlatform, verifierContracts: verifierContracts, time: totalTime};
+    return {CSPlatform: CSPlatform, verifierContracts: verifierContracts, time: totalTime, ipfsInstance:ipfs, ipfsCid: ipfsCid};
 }
 
 
@@ -441,13 +444,14 @@ async function deployProofs(CSPlatform, participantWallet, events, imageUrl) {
  * @returns {Promise<Array.<string, string, string, number, bool>>}
  * @type {(CSPlatform: CSPlatform, verifierContracts: Array, reviewerWallets: Array, events: Array, urlDegreeMapping: Object) => Promise<Array.<string, string, string, number, bool>>}
  */
-async function verifyProof(CSPlatform, verifierContracts, reviewerWallet, event, urlDegreeMapping, degreesToVerify) {
+async function verifyProof(CSPlatform, verifierContracts, reviewerWallet, event, urlDegreeMapping, degreesToVerify, ipfs, ipfsCid) {
     const circuitsFolder = './circuits/';
 
     try {
         const [contributionId, participant, reviewer, imageUrlUtf8, verifier] = event.args;
         const imageUrl = ethers.toUtf8String(imageUrlUtf8);
         const arweaveId = await getArweaveIdFromUrl(imageUrl);
+        await ipfs.cat(ipfsCid)
         const verifierContract = await verifierContracts.find(async (contract) => (await contract.getAddress()).toString() === verifier);
         const { proof, publicSignals } = await snarkjs.groth16.fullProve(
             degreesToVerify,
@@ -471,22 +475,30 @@ module.exports = {
         const urlCoordinatesMapping = await updateContributionData(contributionData);
 
         await createProofs(urlCoordinatesMapping);
-        const deployProofsResult = await deployProofs(CSPlatform, participantWallet, reviewEvents, imageUrl);
+
+        const { createHelia } = await import('helia')
+        const { unixfs } = await import('@helia/unixfs')
+        const helia = await createHelia()
+        const fs = unixfs(helia)
+
+        const deployProofsResult = await deployProofs(CSPlatform, participantWallet, reviewEvents, imageUrl, fs);
         CSPlatform = deployProofsResult.CSPlatform;
         const time = deployProofsResult.time;
         const verifierContracts = deployProofsResult.verifierContracts;
+        const ipfs = deployProofsResult.ipfsInstance;
+        const ipfsCid = deployProofsResult.ipfsCid;
 
         const verifierEvents = await getVerifierUpdatedEvents(CSPlatform);
         const currentVerifierEvent = verifierEvents[verifierEvents.length - 1];
 
         if (FUZZY_TEST === 'False') {
             const degreesToVerify = { verifyLatDegree: -23, verifyLatMinute: 6, verifyLongDegree: 18, verifyLongMinute: 18}
-            await verifyProof(CSPlatform, verifierContracts, reviewerWallet, currentVerifierEvent, urlCoordinatesMapping, degreesToVerify);
+            await verifyProof(CSPlatform, verifierContracts, reviewerWallet, currentVerifierEvent, urlCoordinatesMapping, degreesToVerify, ipfs, ipfsCid);
         } else {
             const verificationLog = [];
             for (let i = 0; i < 1000; i++) {
                 const degreesToVerify = await generateRandomCoordinates(contributionData[imageUrl]);
-                degreesToVerify.verificationResult = await verifyProof(CSPlatform, verifierContracts, reviewerWallet, currentVerifierEvent, urlCoordinatesMapping, degreesToVerify);
+                degreesToVerify.verificationResult = await verifyProof(CSPlatform, verifierContracts, reviewerWallet, currentVerifierEvent, urlCoordinatesMapping, degreesToVerify, ipfs, ipfsCid);
                 verificationLog.push(degreesToVerify);
             }
 

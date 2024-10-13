@@ -15,6 +15,7 @@
   "dependencies": {
     "@akord/akord-js": "^5.11.0",
     "@colors/colors": "^1.6.0",
+    "@helia/unixfs": "^4.0.0",
     "@openzeppelin/contracts": "^5.0.2",
     "@prb/math": "^4.0.3",
     "circomlib": "^2.0.5",
@@ -23,6 +24,7 @@
     "csv-writer": "^1.6.0",
     "dotenv": "^16.4.5",
     "eccrypto": "^1.1.6",
+    "helia": "^5.0.0",
     "prb-math": "^2.4.3",
     "snarkjs": "^0.7.4"
   }

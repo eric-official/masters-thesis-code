@@ -218,6 +218,7 @@ async function main() {
     const NUM_CONTRIBUTIONS = (process.argv[5] || 1);
     const FUZZY_TEST = (process.argv[6] || 'False');
 
+
     // Assumed user inputs
     let contributionData = {
         "https://arweave.net/id5oYIqwOfW_NAEquZJSMRxKov7IRfYREJ03eJCtWZQ": {coordinates: "23° 11' 6.786\" S, 18° 22' 36.054\" E", animalSpecies: ["Elephant", "Lion"]},
