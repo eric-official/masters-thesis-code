@@ -44,7 +44,7 @@ contract CSPlatform {
     event ContributionCreated(address indexed participant, bytes imageUrl);
     event ContributionAssigned(uint indexed contributionId, address indexed participant, address indexed reviewer, bytes imageUrl);
     event CoordinateUpdated(uint indexed contributionId, address indexed participant, address indexed reviewer, bytes imageUrl, bytes coordinates);
-    event ContributionReviewed(uint indexed contributionId, address indexed participant, address indexed reviewer, bytes imageUrl, int result, int256 participantReputation, int256 reviewerReputation);
+    event ContributionReviewed(uint indexed contributionId, address indexed participant, address indexed reviewer, bytes imageUrl, int result, int256 participantReputation, int256 reviewerReputation, int256 reputation_x);
     event VerifierUpdated(uint indexed contributionId, address indexed participant, address indexed reviewer, bytes imageUrl, address verifier);
 
     constructor() payable {
@@ -58,7 +58,7 @@ contract CSPlatform {
         );
     }
 
-    function createContribution(bytes memory _imageUrl, uint _timestamp, bytes32[] memory _animalSpecies) public {
+    function createContribution(bytes memory _imageUrl, uint _timestamp, bytes32[] memory _animalSpecies) public allowedToParticipate {
         Contribution memory contribution = Contribution(
             msg.sender,
             address(0),
@@ -127,9 +127,10 @@ contract CSPlatform {
         Contribution storage contribution = assignedContributions[_contributionId];
         int resultInt = calculateReviewResult(contribution, _contributionId, _urlAssessment, _timestampAssessment, _coordinatesAssessment, _animalSpeciesAssessment);
         contribution.dataQuality = calculateDataQuality(resultInt, _imageAssessment);
+        SD59x18 reputation_x = contribution.dataQuality.mul(calculateMultiplier(users[contribution.participant].nContributions+1, users[contribution.participant].nReviews)).add(users[contribution.participant].reputation);
         updateReviewUsers(contribution);
 
-        emit ContributionReviewed(_contributionId, contribution.participant, contribution.reviewer, contribution.imageUrl, resultInt, SD59x18.unwrap(users[contribution.participant].reputation), SD59x18.unwrap(users[contribution.reviewer].reputation));
+        emit ContributionReviewed(_contributionId, contribution.participant, contribution.reviewer, contribution.imageUrl, resultInt, SD59x18.unwrap(users[contribution.participant].reputation), SD59x18.unwrap(users[contribution.reviewer].reputation), SD59x18.unwrap(reputation_x));
     }
 
     function updateVerifier(address _verifier, uint _contributionId) public onlyParticipant(_contributionId) {
@@ -247,6 +248,11 @@ contract CSPlatform {
 
     modifier unassignedContributionExists() {
         require(unassignedContributions.length > 0, "No unassigned contributions available");
+        _;
+    }
+
+    modifier allowedToParticipate() {
+        require(users[msg.sender].reputation >= banReputation, "User is not allowed to participate");
         _;
     }
 

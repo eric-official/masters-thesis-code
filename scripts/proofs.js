@@ -334,9 +334,12 @@ async function deployVerifierContract(verifierPath) {
  */
 async function addVerifierToCSPlatform(CSPlatform, verifierPath, verifierAddress, events, participantWallet) {
     const contribution = events[events.length - 1];
+    try {
+        const updateVerifierResponse1 = await CSPlatform.connect(participantWallet).updateVerifier(verifierAddress, contribution.args.contributionId);
+        await updateVerifierResponse1.wait();
+    } catch (error) {
 
-    const updateVerifierResponse1 = await CSPlatform.connect(participantWallet).updateVerifier(verifierAddress, contribution.args.contributionId);
-    await updateVerifierResponse1.wait();
+    }
 
     return CSPlatform;
 }

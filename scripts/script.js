@@ -102,11 +102,15 @@ async function reviewContributions(CSPlatform, reviewerWallet, provider) {
     const [id, participant, reviewer, image] = event.args;
 
     const startTime = Date.now();
-    const reviewResponse = await CSPlatform.connect(reviewerWallet).reviewContribution(id, 1, 1, 1, 1, 1);
+    const reviewResponse = await CSPlatform.connect(reviewerWallet).reviewContribution(id, 1, 1, 1, 1, 5);
     await reviewResponse.wait();
     const totalTime = Date.now() - startTime;
 
-    return {CSPlatform: CSPlatform, time: totalTime};
+    const reviews = await getContributionReviewedEvents(CSPlatform);
+    const review = reviews[reviews.length - 1];
+    const [ , , , , , participantReputation, , reputation_x] = review.args;
+
+    return {CSPlatform: CSPlatform, time: totalTime, reputation: participantReputation, reputation_x: reputation_x};
 }
 
 
@@ -144,11 +148,13 @@ async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWa
     CSPlatform = reviewContributionResult.CSPlatform;
     const reviewTimeOn = reviewContributionResult.time;
     const reviewTimeOff = Date.now() - initialTime - reviewTimeOn;
+    const participantReputation = Number(reviewContributionResult.reputation) / 1e18;
+    const reputation_x = Number(reviewContributionResult.reputation_x) / 1e18;
     const participantReviewBalance = await provider.getBalance(participantWallet.address);
     const reviewerReviewBalance = await provider.getBalance(reviewerWallet.address);
 
     initialTime = Date.now();
-    const createZKPContractsRes = await createZKPContracts(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl, FUZZY_TEST);
+    const createZKPContractsRes = await createZKPContracts(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl, FUZZY_TEST, provider);
     CSPlatform = createZKPContractsRes.CSPlatform;
     const zkpTimeOn = createZKPContractsRes.time;
     const zkpTimeOff = Date.now() - initialTime - zkpTimeOn;
@@ -181,7 +187,7 @@ async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWa
         final: reviewerFinalBalance
     }
 
-    const timeRecord = {
+    const timeRepRecord = {
         step: i + 1,
         createOn: createTimeOn,
         createOff: createTimeOff,
@@ -193,10 +199,12 @@ async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWa
         reviewOff: reviewTimeOff,
         zkpOn: zkpTimeOn,
         zkpOff: zkpTimeOff,
-        total: totalTime
+        total: totalTime,
+        reputation: participantReputation,
+        reputation_x: reputation_x
     }
 
-    return {CSPlatform: CSPlatform, participantBalances: participantBalances, reviewerBalances: reviewerBalances, timeRecord: timeRecord};
+    return {CSPlatform: CSPlatform, participantBalances: participantBalances, reviewerBalances: reviewerBalances, timeRepRecord: timeRepRecord};
 }
 
 
@@ -234,13 +242,13 @@ async function main() {
     console.log("Wallets created!");
     console.log(" ");
 
-    const tx2 = await signer.sendTransaction({to: reviewerWallets[0].address, value: ethers.parseEther("1000")});
+    const tx2 = await signer.sendTransaction({to: reviewerWallets[0].address, value: ethers.parseEther("10")});
     await tx2.wait();
 
     console.log("Deploying CSPlatform...");
     const CSPlatformFactory = await ethers.getContractFactory("CSPlatform", reviewerWallets[0]);
     let CSPlatform = await CSPlatformFactory.deploy({
-        value: ethers.parseEther("1000") // 1 Ether, adjust the amount as needed
+        value: ethers.parseEther("10") // 1 Ether, adjust the amount as needed
     });
     await CSPlatform.waitForDeployment();
     console.log("CSPlatform deployed to:", await CSPlatform.getAddress());
@@ -259,7 +267,7 @@ async function main() {
     const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
     progressBar.start(NUM_CONTRIBUTIONS, 0);
     const balanceRecords = [];
-    const timeRecords = [];
+    const timeRepRecords = [];
     const roundRecords = [];
     roundRecords.push({ round: 0, numReviews: 1 });
     let round = 1;
@@ -309,9 +317,9 @@ async function main() {
 
         balanceRecords.push(processResults.participantBalances);
         balanceRecords.push(processResults.reviewerBalances);
-        timeRecords.push(processResults.timeRecord);
+        timeRepRecords.push(processResults.timeRepRecord);
 
-        const contributionReviewedEvents = await getContributionReviewedEvents(CSPlatform, 1);
+        const contributionReviewedEvents = await getContributionReviewedEvents(CSPlatform);
         const recentEvent = contributionReviewedEvents[contributionReviewedEvents.length - 1];
         if (Number(recentEvent.args.participantReputation) / 1e18 >= 0.7 && participantWallets.length > 1) {
             reviewerWallets.push(participantWallet);
@@ -339,7 +347,7 @@ async function main() {
     await balanceWriter.writeRecords(balanceRecords)
 
     const timeWriter = createCsvWriter({
-        path: 'data/times' + Date.now() + '.csv',
+        path: 'data/timesRep' + Date.now() + '.csv',
         header: [
             {id: 'step', title: 'Step'},
             {id: 'createOn', title: 'Create Contribution On-Chain'},
@@ -352,10 +360,12 @@ async function main() {
             {id: 'reviewOff', title: 'Review Contribution Off-Chain'},
             {id: 'zkpOn', title: 'ZKP Contracts On-Chain'},
             {id: 'zkpOff', title: 'ZKP Contracts Off-Chain'},
-            {id: 'total', title: 'Total Time' }
+            {id: 'total', title: 'Total Time' },
+            {id: 'reputation', title: 'Participant Reputation' },
+            {id: 'reputation_x', title: 'Reputation x' }
         ]
     });
-    await timeWriter.writeRecords(timeRecords)
+    await timeWriter.writeRecords(timeRepRecords)
 
     const roundWriter = createCsvWriter({
         path: 'data/rounds' + Date.now() + '.csv',
