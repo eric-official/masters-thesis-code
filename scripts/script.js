@@ -1,18 +1,10 @@
 const {ethers} = require('hardhat')
-const {getContributionCreatedEvents, getContributionAssignedEvents, getCoordinateUpdatedEvents,
-    getContributionReviewedEvents
-} = require('./events')
+const {getContributionAssignedEvents, getContributionReviewedEvents} = require('./events')
 const {formatCoordinatesToBytes, getImageURLs, deleteVerifierContracts} = require('./utils')
-const {displayWallets, displayCreatedContributions, displayAssignedContributions, displayUpdatedCoordinates, displayDecryptedCoordinates,
-    displayReviewedContributions,
-    displayUpdatedVerifiers, displayVerifications
-} = require('./display')
-const {createProofs, createZKPContracts} = require('./proofs')
-const Table = require('cli-table3')
-const colors = require('@colors/colors');
+const {displayWallets} = require('./display')
+const {createZKPContracts} = require('./proofs')
 const eccrypto = require('eccrypto');
 const cliProgress = require('cli-progress');
-const fs = require('fs');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
 
@@ -39,6 +31,13 @@ async function createWallets(numWallets, signer, provider) {
 }
 
 
+/**
+ * Split wallets into participant and reviewer wallets
+ * @param connectedWallets - list of connected wallets
+ * @param participantReviewerRatio - ratio of participants to reviewers
+ * @returns {Promise<*[]>}
+ * @type {(connectedWallets: Array.<ethers.Wallet>, participantReviewerRatio: number) => Promise<*[]>}
+ */
 async function splitWallets(connectedWallets, participantReviewerRatio) {
     const participantWallets = connectedWallets.slice(1, connectedWallets.length);
     const reviewerWallets = connectedWallets.slice(0, 1);
@@ -47,6 +46,15 @@ async function splitWallets(connectedWallets, participantReviewerRatio) {
 }
 
 
+/**
+ * Create contribution with participant wallet
+ * @param CSPlatform - CSPlatform contract
+ * @param participantWallet - participant wallet
+ * @param imageUrl - URL of the image to be uploaded
+ * @param contributionData - data of the contribution
+ * @returns {Promise<{CSPlatform, time: number}>}
+ * @type {(CSPlatform: any, participantWallet: any, imageUrl: string, contributionData: any) => Promise<{CSPlatform: any, time: number}>}
+ */
 async function createContributions(CSPlatform, participantWallet, imageUrl, contributionData) {
     const animalSpecies = contributionData[imageUrl].animalSpecies;
 
@@ -72,6 +80,15 @@ async function assignContributions(CSPlatform, reviewerWallet) {
 }
 
 
+/**
+ * Update coordinates of the contribution
+ * @param CSPlatform - CSPlatform contract
+ * @param participantWallet - participant wallet
+ * @param reviewerWallet - reviewer wallet
+ * @param contributionData - data of the contribution
+ * @returns {Promise<{CSPlatform, time: number}>}
+ * @type {(CSPlatform: any, participantWallet: any, reviewerWallet: any, contributionData: any) => Promise<{CSPlatform: any, time: number}>}
+ */
 async function updateCoordinates(CSPlatform, participantWallet, reviewerWallet, contributionData) {
     const events = await getContributionAssignedEvents(CSPlatform)
 
@@ -95,7 +112,14 @@ async function updateCoordinates(CSPlatform, participantWallet, reviewerWallet, 
 }
 
 
-async function reviewContributions(CSPlatform, reviewerWallet, provider) {
+/**
+ * Review contributions
+ * @param CSPlatform - CSPlatform contract
+ * @param reviewerWallet - reviewer wallet
+ * @returns {Promise<{CSPlatform, reputation_x: *, reputation: *, time: number}>}
+ * @type {(CSPlatform: any, reviewerWallet: any) => Promise<{CSPlatform: any, reputation_x: *, reputation: *, time: number}>}
+ */
+async function reviewContributions(CSPlatform, reviewerWallet) {
     const events = await getContributionAssignedEvents(CSPlatform);
 
     const event = events[events.length - 1];
@@ -108,12 +132,24 @@ async function reviewContributions(CSPlatform, reviewerWallet, provider) {
 
     const reviews = await getContributionReviewedEvents(CSPlatform);
     const review = reviews[reviews.length - 1];
-    const [ , , , , , participantReputation, , reputation_x] = review.args;
+    const [, , , , , participantReputation, , reputation_x] = review.args;
 
     return {CSPlatform: CSPlatform, time: totalTime, reputation: participantReputation, reputation_x: reputation_x};
 }
 
 
+/**
+ * Run crowdsourcing process
+ * @param CSPlatform - CSPlatform contract
+ * @param participantWallet - participant wallet
+ * @param reviewerWallet - reviewer wallet
+ * @param contributionData - data of the contribution
+ * @param imageUrl - URL of the image to be uploaded
+ * @param provider - Ethers provider
+ * @param i - index of the contribution
+ * @param FUZZY_TEST - fuzzy test flag
+ * @returns {Promise<{CSPlatform, participantBalances: {address, initial: *, review: *, final: *, create: *, update: *, step: *, user: string, assign: *}, reviewerBalances: {address, initial: *, review: *, final: *, create: *, update: *, step: *, user: string, assign: *}, timeRepRecord: {reputation_x: number, reputation: number, assignOff: number, total: number, reviewOff: number, updateOff: number, zkpOn, zkpOff: number, createOff: number, reviewOn: *, step: *, createOn: *, assignOn: number, updateOn: *}}>}
+ */
 async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWallet, contributionData, imageUrl, provider, i, FUZZY_TEST) {
     const participantInitialBalance = await provider.getBalance(participantWallet.address);
     const reviewerInitialBalance = await provider.getBalance(reviewerWallet.address);
@@ -144,7 +180,7 @@ async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWa
     const reviewerUpdateBalance = await provider.getBalance(reviewerWallet.address);
 
     initialTime = Date.now();
-    const reviewContributionResult = await reviewContributions(CSPlatform, reviewerWallet, provider);
+    const reviewContributionResult = await reviewContributions(CSPlatform, reviewerWallet);
     CSPlatform = reviewContributionResult.CSPlatform;
     const reviewTimeOn = reviewContributionResult.time;
     const reviewTimeOff = Date.now() - initialTime - reviewTimeOn;
@@ -204,12 +240,24 @@ async function runCrowdsourcingProcess(CSPlatform, participantWallet, reviewerWa
         reputation_x: reputation_x
     }
 
-    return {CSPlatform: CSPlatform, participantBalances: participantBalances, reviewerBalances: reviewerBalances, timeRepRecord: timeRepRecord};
+    return {
+        CSPlatform: CSPlatform,
+        participantBalances: participantBalances,
+        reviewerBalances: reviewerBalances,
+        timeRepRecord: timeRepRecord
+    };
 }
 
 
 /*Script to interact with all functions of CSPlatform.sol contract*/
 async function main() {
+
+    console.assert(process.argv.length === 7, "Usage: npx hardhat run scripts/script.js <SIMULATION_MODE> <PARTICIPANT_SELECTION> <NUM_WALLETS> <NUM_CONTRIBUTIONS> <FUZZY_TEST>")
+    console.assert(["Standard", "Rounds"].includes(process.argv[2]), "SIMULATION_MODE must be either 'Standard' or 'Rounds'")
+    console.assert(["Subsequent", "Alternating"].includes(process.argv[3]), "PARTICIPANT_SELECTION must be either 'Subsequent' or 'Alternating'")
+    console.assert(Number.isInteger(Number(process.argv[4])), "NUM_WALLETS must be an integer")
+    console.assert(Number.isInteger(Number(process.argv[5])), "NUM_CONTRIBUTIONS must be an integer")
+    console.assert(["True", "False"].includes(process.argv[6]), "FUZZY_TEST must be either 'True' or 'False'")
 
     // Constants for simulating test cases
     const SIMULATION_MODE = (process.argv[2] || "Standard")
@@ -218,19 +266,52 @@ async function main() {
     const NUM_CONTRIBUTIONS = (process.argv[5] || 1);
     const FUZZY_TEST = (process.argv[6] || 'False');
 
+    if (FUZZY_TEST === 'True') {
+        console.assert(NUM_CONTRIBUTIONS === 1 && NUM_WALLETS === 2, "FUZZY_TEST can only be used with 1 contribution and 2 wallets")
+    }
 
     // Assumed user inputs
     let contributionData = {
-        "https://arweave.net/id5oYIqwOfW_NAEquZJSMRxKov7IRfYREJ03eJCtWZQ": {coordinates: "23° 11' 6.786\" S, 18° 22' 36.054\" E", animalSpecies: ["Elephant", "Lion"]},
-        "https://arweave.net/Rk9Y8H1ovtcVDit5IsG2SJEZhBqL5Iy_DM9-ZQRx5nk": {coordinates: "23° 12' 48.954\" S, 18° 21' 18.996\" E", animalSpecies: ["Elephant", "Lion"]},
-        "https://arweave.net/7kHJd52Gc-eGKwrNtQ5SU7JULtUEMN6Rrr_Fh5ZzKBI": {coordinates: "23° 11' 19.194\" S, 18° 22' 35.91\" E", animalSpecies: ["Elephant", "Lion"]},
-        "https://arweave.net/mbmDz84Bwg-QJUPti1R_NDppp7GlaKU8B-lIaIl-WeI": {coordinates: "23° 12' 46.794\" S, 18° 21' 29.484\" E", animalSpecies: ["Elephant", "Lion"]},
-        "https://arweave.net/9xxe9BJVc8GuLiwcQ1b-tJ13AZjk8M2Htro-Ho_Tty4": {coordinates: "23° 12' 44.838\" S, 18° 21' 29.256\" E", animalSpecies: ["Elephant", "Lion"]},
-        "https://arweave.net/1x0AMo5rNQ49CSSRcRPfvNRcSnZHNyZiP-qkEE0yfuc": {coordinates: "23° 11' 19.182\" S, 18° 22' 38.19\" E", animalSpecies: ["Elephant", "Lion"]},
-        "https://arweave.net/HQjn6bjPJ7ZVFqD5OT9ZZi5f6G6aQ1EsAY71ArKs718": {coordinates: "23° 11' 4.698\" S, 18° 22' 54.78\" E", animalSpecies: ["Elephant", "Lion"]},
-        "https://arweave.net/I30T_ukE7QGYMPEJv3BMvTfftqyl0UbgMoovNUXCNTw": {coordinates: "23° 11' 4.65\" S, 18° 22' 34.926\" E", animalSpecies: ["Elephant", "Lion"]},
-        "https://arweave.net/NqQee7j8ES8wauzqBOCLg-xB9jNaMCNYB68x3ZpuUgk": {coordinates: "23° 12' 46.878\" S, 18° 21' 14.844\" E", animalSpecies: ["Elephant", "Lion"]},
-        "https://arweave.net/Gzpb6toLQtpzWr2dItEmtbutSOWmFH1LOQh2uxd8nck": {coordinates: "23° 11' 4.638\" S, 18° 22' 39.138\" E", animalSpecies: ["Elephant", "Lion"]},
+        "https://arweave.net/id5oYIqwOfW_NAEquZJSMRxKov7IRfYREJ03eJCtWZQ": {
+            coordinates: "23° 11' 6.786\" S, 18° 22' 36.054\" E",
+            animalSpecies: ["Elephant", "Lion"]
+        },
+        "https://arweave.net/Rk9Y8H1ovtcVDit5IsG2SJEZhBqL5Iy_DM9-ZQRx5nk": {
+            coordinates: "23° 12' 48.954\" S, 18° 21' 18.996\" E",
+            animalSpecies: ["Elephant", "Lion"]
+        },
+        "https://arweave.net/7kHJd52Gc-eGKwrNtQ5SU7JULtUEMN6Rrr_Fh5ZzKBI": {
+            coordinates: "23° 11' 19.194\" S, 18° 22' 35.91\" E",
+            animalSpecies: ["Elephant", "Lion"]
+        },
+        "https://arweave.net/mbmDz84Bwg-QJUPti1R_NDppp7GlaKU8B-lIaIl-WeI": {
+            coordinates: "23° 12' 46.794\" S, 18° 21' 29.484\" E",
+            animalSpecies: ["Elephant", "Lion"]
+        },
+        "https://arweave.net/9xxe9BJVc8GuLiwcQ1b-tJ13AZjk8M2Htro-Ho_Tty4": {
+            coordinates: "23° 12' 44.838\" S, 18° 21' 29.256\" E",
+            animalSpecies: ["Elephant", "Lion"]
+        },
+        "https://arweave.net/1x0AMo5rNQ49CSSRcRPfvNRcSnZHNyZiP-qkEE0yfuc": {
+            coordinates: "23° 11' 19.182\" S, 18° 22' 38.19\" E",
+            animalSpecies: ["Elephant", "Lion"]
+        },
+        "https://arweave.net/HQjn6bjPJ7ZVFqD5OT9ZZi5f6G6aQ1EsAY71ArKs718": {
+            coordinates: "23° 11' 4.698\" S, 18° 22' 54.78\" E",
+            animalSpecies: ["Elephant", "Lion"]
+        },
+        "https://arweave.net/I30T_ukE7QGYMPEJv3BMvTfftqyl0UbgMoovNUXCNTw": {
+            coordinates: "23° 11' 4.65\" S, 18° 22' 34.926\" E",
+            animalSpecies: ["Elephant", "Lion"]
+        },
+        "https://arweave.net/NqQee7j8ES8wauzqBOCLg-xB9jNaMCNYB68x3ZpuUgk": {
+            coordinates: "23° 12' 46.878\" S, 18° 21' 14.844\" E",
+            animalSpecies: ["Elephant", "Lion"]
+        },
+        "https://arweave.net/Gzpb6toLQtpzWr2dItEmtbutSOWmFH1LOQh2uxd8nck": {
+            coordinates: "23° 11' 4.638\" S, 18° 22' 39.138\" E",
+            animalSpecies: ["Elephant", "Lion"]
+        },
     }
 
     const [signer] = await ethers.getSigners();
@@ -257,7 +338,10 @@ async function main() {
 
     // fill ether difference of reviewerWallets[0] up to 10 ether
     const reviewerWallet0Balance = await provider.getBalance(reviewerWallets[0].address);
-    const tx = await signer.sendTransaction({to: reviewerWallets[0].address, value: ethers.parseEther("10") - reviewerWallet0Balance});
+    const tx = await signer.sendTransaction({
+        to: reviewerWallets[0].address,
+        value: ethers.parseEther("10") - reviewerWallet0Balance
+    });
     await tx.wait();
 
     console.log("Get image URLs...");
@@ -270,7 +354,7 @@ async function main() {
     const balanceRecords = [];
     const timeRepRecords = [];
     const roundRecords = [];
-    roundRecords.push({ round: 0, numReviews: 1 });
+    roundRecords.push({round: 0, numReviews: 1});
     let round = 1;
     let numReviewsInRound = 0;
 
@@ -285,7 +369,7 @@ async function main() {
 
         let reviewerIndex;
         if (SIMULATION_MODE === "Rounds" && numReviewsInRound === reviewerWallets.length) {
-            const roundRecord = { round: round, numReviews: numReviewsInRound }
+            const roundRecord = {round: round, numReviews: numReviewsInRound}
             roundRecords.push(roundRecord);
             numReviewsInRound = 0;
             reviewerIndex = numReviewsInRound
@@ -361,9 +445,9 @@ async function main() {
             {id: 'reviewOff', title: 'Review Contribution Off-Chain'},
             {id: 'zkpOn', title: 'ZKP Contracts On-Chain'},
             {id: 'zkpOff', title: 'ZKP Contracts Off-Chain'},
-            {id: 'total', title: 'Total Time' },
-            {id: 'reputation', title: 'Participant Reputation' },
-            {id: 'reputation_x', title: 'Reputation x' }
+            {id: 'total', title: 'Total Time'},
+            {id: 'reputation', title: 'Participant Reputation'},
+            {id: 'reputation_x', title: 'Reputation x'}
         ]
     });
     await timeWriter.writeRecords(timeRepRecords)

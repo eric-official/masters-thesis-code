@@ -371,9 +371,9 @@ async function convertCallData(calldata) {
 
 /**
  * Create proofs for all contributions
- * @param urlDegreeMapping - mapping of image URLs to degrees
+ * @param urlCoordinatesMapping - mapping of image URLs to degrees
  * @returns {Promise<void>}
- * @type {(urlDegreeMapping: Object) => Promise<void>}
+ * @type {(urlCoordinatesMapping: Object) => Promise<void>}
  */
 async function createProofs(urlCoordinatesMapping) {
 
@@ -404,6 +404,8 @@ async function createProofs(urlCoordinatesMapping) {
  * @param CSPlatform - CSPlatform contract
  * @param participantWallet - wallet of participant
  * @param events - list of ContributionReviewed events
+ * @param imageUrl - URL of the contribution
+ * @param ipfs - ipfs instance
  * @returns {Promise<{CSPlatform, verifierContracts: *[]}>}
  * @type {(CSPlatform: CSPlatform, participantWallets: Array, events: Array) => Promise<{CSPlatform: CSPlatform, verifierContracts: Array}>}
  */
@@ -439,8 +441,11 @@ async function deployProofs(CSPlatform, participantWallet, events, imageUrl, ipf
  * @param CSPlatform - CSPlatform contract
  * @param verifierContracts - list of verifier contracts
  * @param reviewerWallet - wallet of reviewer
- * @param events - list of VerifierUpdated events
+ * @param event - VerifierUpdated event
  * @param urlDegreeMapping - mapping of image URLs to degrees
+ * @param degreesToVerify - degrees to verify
+ * @param ipfs - ipfs instance
+ * @param ipfsCid - ipfs cid
  * @returns {Promise<Array.<string, string, string, number, bool>>}
  * @type {(CSPlatform: CSPlatform, verifierContracts: Array, reviewerWallets: Array, events: Array, urlDegreeMapping: Object) => Promise<Array.<string, string, string, number, bool>>}
  */
