@@ -115,12 +115,24 @@ The script takes the following arguments:
 
 To audit the smart contract CSPlatform.sol, execute the following steps:
 
-1. Open the remappings.json file
-2. Change the directory `/Users/ericnaser/...` to your local path for the SD59x18.sol file of the prb-math library.
-3. Run the following command in the terminal:
+1. To download the latest version of Mythril, see [here](https://github.com/Consensys/mythril).
+2. Open the remappings.json file
+3. Change the directory `/Users/ericnaser/...` to your local path for the SD59x18.sol file of the prb-math library.
+4. Run the following command in the terminal:
     ```sh
     myth analyze contracts/CSPlatform.sol --solc-json remappings.json --max-depth 20
     ```
+   
+
+## Security Audit of the zk-SNARK Circuit
+To audit the circuit of the zk-SNARK, execute the following steps:
+
+1. To download the latest version of Circomspect, see [here](https://github.com/trailofbits/circomspect).
+2. Run the following command in the terminal:
+    ```sh
+    circomspect circuits/coordinate-circuit-id5oYIqwOfW_NAEquZJSMRxKov7IRfYREJ03eJCtWZQ.circom
+    ```
+3. Change the file name if you want to audit another circuit.
 
 <!-- LICENSE -->
 ## License
